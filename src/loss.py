@@ -53,6 +53,9 @@ def test_rouge():
     assert rouge(y_true, y_pred) == 0.0
     y_pred = ""
 
+    y_list = ["This is a test", "This is a test", "This is a test"]
+    assert eval_loss(y_list, y_list) == [1.0, 1.0, 1.0]
+
 
 if __name__ == "__main__":
     test_rouge()
