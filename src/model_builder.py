@@ -98,5 +98,17 @@ class ModelBuilder:
             truncation=truncation,
             padding=padding,
         )
-        self.tokenizer = tk
-        return tk
+        
+        # config stuff
+        # NB: This was originally after Data Cell
+        tokenizer.pad_token = tokenizer.eos_token  # end-of-sequence (eos) padding
+        self.base_model.resize_token_embeddings(
+            len(tokenizer)
+        )  # resize to embeddings to match updated tokenizer
+        tokenizer.pad_token_id = (
+            tokenizer.eos_token_id
+        )  # set id of padding token to be id of eos token
+        self.base_model.config.end_token_id = tokenizer.eos_token_id
+        self.base_model.config.pad_token_id = self.base_model.config.eos_token_id
+        self.tokenizer = tokenizer
+        return tokenizer
