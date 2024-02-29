@@ -1,5 +1,5 @@
 from transformers import AutoTokenizer
-import abc
+from abc import ABC, abstractmethod
 import logging
 
 logger = logging.getLogger(__name__)
