@@ -63,7 +63,7 @@ class ModelBuilder:
     @tokenizer.setter
     def tokenizer(self, tk):
         self._tokenizer = tk
-    
+
     def create_base_model(self):
         """
         Creates and returns the base model.
@@ -80,6 +80,16 @@ class ModelBuilder:
         )
         return base_model
 
+    def _create_tokenizer(self, max_length, truncation, padding):
+        # detach this part so base tokenizer can be used in other places
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id,
+            model_max_length=max_length,
+            truncation=truncation,
+            padding=padding,
+        )
+        return tokenizer
+
     def create_tokenizer(self, max_length=512, truncation=True, padding=True):
         """
         Creates a tokenizer for the model.
@@ -92,13 +102,8 @@ class ModelBuilder:
         Returns:
             tokenizer: The created tokenizer.
         """
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id,
-            model_max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        
+        tokenizer = self._create_tokenizer(max_length, truncation, padding)
+
         # config stuff
         # NB: This was originally after Data Cell
         tokenizer.pad_token = tokenizer.eos_token  # end-of-sequence (eos) padding
