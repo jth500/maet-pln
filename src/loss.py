@@ -10,7 +10,13 @@ def rouge(y_true: str, y_pred: str) -> float:
     """
     # TODO: Implement rouge loss
     # Not sure if inputs should be strings or tokenised lists?? Haven't looked at this at all
+    # presumably there's a library for this?
     return None
+
+
+def other_loss_metric(y_true: str, y_pred: str) -> float:
+    # TODO
+    pass
 
 
 def eval_loss(y_true: list, y_pred: list, loss_metric="rouge") -> list:
@@ -24,8 +30,9 @@ def eval_loss(y_true: list, y_pred: list, loss_metric="rouge") -> list:
         list: List of losses for each element in the batch.
     """
     # TODO: Vectorize this (if possible)
-    loss_funcs = {"rouge": rouge, "other": "TODO"}
-    return [loss_funcs[loss_metric](y_true[i], y_pred[i]) for i in range(len(y_true))]
+    LOSS_FUNCS = {"rouge": rouge, "other": other_loss_metric}
+    assert len(y_true) == len(y_pred), "y_true and y_pred must have the same length"
+    return [LOSS_FUNCS[loss_metric](y_true[i], y_pred[i]) for i in range(len(y_true))]
 
 
 def test_rouge():
