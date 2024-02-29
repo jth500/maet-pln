@@ -92,7 +92,7 @@ class ModelBuilder:
         Returns:
             tokenizer: The created tokenizer.
         """
-        tk = AutoTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             self.model_id,
             model_max_length=max_length,
             truncation=truncation,
