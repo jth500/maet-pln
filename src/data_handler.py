@@ -2,12 +2,13 @@ import json
 import abc
 from datasets import load_dataset
 import logging
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
 
 # TODO: Load dataset is called a couple of times
-class DatasetHandler(abc.ABCMeta):
+class DatasetHandler(ABC):
     """
     A class used to handle the dataset used for training the model.
 
@@ -39,8 +40,8 @@ class DatasetHandler(abc.ABCMeta):
         self.data_dir = data_dir
         self.tokenizer = tokenizer
 
-    @abc.abstractmethod
     @property
+    @abstractmethod
     def template(self):
         # implement this in the subclass
         # e..g return "You are an expert summary... {input} {output}"

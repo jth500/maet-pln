@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class TokenizationHandler(abc.ABCMeta):
+class TokenizationHandler(ABC):
     def __init__(self, model_id):
         self.model_id = model_id
         self.tokenizer = None

@@ -2,12 +2,12 @@ from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 import logging
 import json
-import abc
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
 
-class ModelBuilder(abc.ABCMeta):
+class ModelBuilder(ABC):
     """
     A class used to build and manage a machine learning model and its tokenizer.
 
