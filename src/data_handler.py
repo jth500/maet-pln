@@ -129,7 +129,7 @@ class DatasetHandler:
             val_data (Dataset): Processed validation data.
         """
         # dataset = load_dataset(self.dataset_name, split="train")  # why called twice?# it's not used?
-        self._data_to_json(dataset_name=self.dataset_name)
+        self._data_to_json()
 
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
