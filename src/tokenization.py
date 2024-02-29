@@ -1,4 +1,4 @@
-from Transformers import AutoTokenizer
+from transformers import AutoTokenizer
 import abc
 import logging
 
