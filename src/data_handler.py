@@ -137,15 +137,11 @@ class DatasetHandler:
         train_data = (
             train_val["train"]
             .shuffle()
-            .map(
-                lambda x: self.generate_and_tokenize_prompt(x, tokenizer=self.tokenizer)
-            )
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
         )
         val_data = (
             train_val["test"]
             .shuffle()
-            .map(
-                lambda x: self.generate_and_tokenize_prompt(x, tokenizer=self.tokenizer)
-            )
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
         )
         return train_data, val_data
