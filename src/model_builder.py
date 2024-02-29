@@ -54,6 +54,16 @@ class ModelBuilder:
     def base_model(self, bm):
         self._base_model = bm
 
+    @property
+    def tokenizer(self):
+        if self._tokenizer is None:
+            self._tokenizer = self.create_tokenizer()
+        return self._tokenizer
+
+    @tokenizer.setter
+    def tokenizer(self, tk):
+        self._tokenizer = tk
+    
     def create_base_model(self):
         """
         Creates and returns the base model.
