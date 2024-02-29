@@ -1,6 +1,7 @@
 from transformers import AutoTokenizer
 from abc import ABC, abstractmethod
 import logging
+from utils import update_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ class TokenizationHandler(ABC):
     @property
     def tokenizer(self):
         if self._tokenizer is None:
-            self._tokenizer = self._create_tokenizer()
+            raise ValueError("Tokenizer has not been created")
         return self._tokenizer
 
     @tokenizer.setter
@@ -32,11 +33,17 @@ class TokenizationHandler(ABC):
         Returns:
             tokenizer: The created tokenizer.
         """
-        return AutoTokenizer.from_pretrained(self.model_id, **kwargs)
+        defaults = dict(model_max_length=512, truncation=True, padding=True)
+        kwargs = update_kwargs(kwargs, defaults)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
+        return self.tokenizer
 
     def create_tokenizer(self, **kwargs):
         # TODO: This stuff will probably be model specific
-        tokenizer = self.tokenizer
+        try:
+            tokenizer = self.tokenizer
+        except ValueError:
+            tokenizer = self._create_tokenizer(**kwargs)
 
         # config stuff
         # NB: This was originally after Data Cell
@@ -52,7 +59,7 @@ class TokenizationHandler(ABC):
         self.tokenizer = tokenizer
         return tokenizer
 
-    def tokenize(self, prompt):
+    def tokenize(self, prompt, **kwargs):
         """
         Tokenizes the given prompt using the tokenizer.
 
@@ -62,13 +69,14 @@ class TokenizationHandler(ABC):
         Returns:
             dict: A dictionary containing the tokenized prompt and labels.
         """
-        result = self.tokenizer(
-            prompt,
-            truncation=True,
-            max_length=512,
-            padding=False,
-            return_tensors=None,
-        )
+        defaults = {
+            "truncation": True,
+            "max_length": 512,
+            "padding": False,
+            "return_tensors": None,
+        }
+        kwargs = update_kwargs(kwargs, defaults)
+        result = self.tokenizer(prompt, **kwargs)
         result["labels"] = result["input_ids"].copy()
         return result
 

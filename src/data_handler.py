@@ -75,9 +75,8 @@ class DatasetHandler(ABC):
         dataset_splits = {"train": dataset}
 
         for key, ds in dataset_splits.items():
-            with open(
-                "data_json", "w"
-            ) as f:  # overwriting instead of appending - is this what we want?
+            # overwriting instead of appending - is this what we want?
+            with open("data_json", "w") as f:
                 for item in ds:
                     newitem = {
                         "input": item["prompt"],

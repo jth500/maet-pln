@@ -3,6 +3,7 @@ from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 import logging
 import json
 from abc import ABC, abstractmethod
+from utils import update_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -59,20 +60,21 @@ class ModelBuilder(ABC):
     def tokenizer(self, tk):
         self._tokenizer = tk
 
-    def create_base_model(self):
+    def create_base_model(self, **kwargs):
         """
         Creates and returns the base model.
 
         Returns:
             The base model.
         """
-        logger.info("Creating base model")
-        base_model = self.model_type.from_pretrained(
-            self.model_id,
+        defaults = dict(
             use_cache=False,
             # load_in_8bit=True,
             device_map="auto",
         )
+        kwargs = update_kwargs(kwargs, defaults)
+        logger.info("Creating base model")
+        base_model = self.model_type.from_pretrained(self.model_id, **kwargs)
         return base_model
 
 
