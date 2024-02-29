@@ -1,12 +1,13 @@
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
 import logging
 import json
+import abc
 
-logger = logging.getLogger("model_builder")
+logger = logging.getLogger(__name__)
 
 
-class ModelBuilder:
+class ModelBuilder(abc.ABCMeta):
     """
     A class used to build and manage a machine learning model and its tokenizer.
 
@@ -29,12 +30,6 @@ class ModelBuilder:
         Initializes the ModelBuilder with a model id and model type.
     create_base_model(self)
         Creates and returns the base model.
-    create_tokenizer(self, max_length=512, truncation=True, padding=True)
-        Creates a tokenizer for the model.
-    _tokenize(self, prompt)
-        Tokenizes a given prompt.
-    generate_and_tokenize_prompt(self, data_point, tokenizer)
-        Generates and tokenizes a prompt from a given data point.
     """
 
     def __init__(self, model_id, model_type):
@@ -57,7 +52,7 @@ class ModelBuilder:
     @property
     def tokenizer(self):
         if self._tokenizer is None:
-            self._tokenizer = self.create_tokenizer()
+            raise ValueError("Tokenizer has not been created")
         return self._tokenizer
 
     @tokenizer.setter
@@ -80,40 +75,7 @@ class ModelBuilder:
         )
         return base_model
 
-    def _create_tokenizer(self, max_length, truncation, padding):
-        # detach this part so base tokenizer can be used in other places
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id,
-            model_max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        return tokenizer
 
-    def create_tokenizer(self, max_length=512, truncation=True, padding=True):
-        """
-        Creates a tokenizer for the model.
-
-        Args:
-            max_length (int, optional): The maximum length of the input sequences. Defaults to 512.
-            truncation (bool, optional): Whether to truncate the input sequences to `max_length`. Defaults to True.
-            padding (bool, optional): Whether to pad the input sequences to `max_length`. Defaults to True.
-
-        Returns:
-            tokenizer: The created tokenizer.
-        """
-        tokenizer = self._create_tokenizer(max_length, truncation, padding)
-
-        # config stuff
-        # NB: This was originally after Data Cell
-        tokenizer.pad_token = tokenizer.eos_token  # end-of-sequence (eos) padding
-        self.base_model.resize_token_embeddings(
-            len(tokenizer)
-        )  # resize to embeddings to match updated tokenizer
-        tokenizer.pad_token_id = (
-            tokenizer.eos_token_id
-        )  # set id of padding token to be id of eos token
-        self.base_model.config.end_token_id = tokenizer.eos_token_id
-        self.base_model.config.pad_token_id = self.base_model.config.eos_token_id
-        self.tokenizer = tokenizer
-        return tokenizer
+class T5ModelBuilder(ModelBuilder):
+    def __init__(self):
+        super().__init__(model_id="t5-large", model_type=AutoModelForSeq2SeqLM)
