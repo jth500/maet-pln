@@ -37,7 +37,7 @@ class ModelBuilder:
         Generates and tokenizes a prompt from a given data point.
     """
 
-    def init(self, model_id, model_type):
+    def __init__(self, model_id, model_type):
         self.model_id = model_id
         self.model_type = model_type
 
