@@ -30,6 +30,12 @@ class DatasetHandler:
         Processes the data by loading the dataset, converting it to JSON format, splitting it into training and validation sets, and tokenizing the prompts.
     """
 
+    TEMPLATE = (
+        """You are an expert in text summarization. You are given the full text."""
+        """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+        """### Input:\n{input}\n\n### Response:\n{output}"""
+    )
+
     def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
         self.dataset_name = dataset_name
         self.data_dir = data_dir
@@ -93,13 +99,9 @@ class DatasetHandler:
                     }
                     f.write(json.dumps(newitem) + "\n")
 
-    @staticmethod
-    def generate_prompt(input, output=""):
-        return (
-            """You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
-            f"""### Input:\n{input}\n\n### Response:\n{output}"""
-        )
+    @classmethod
+    def generate_prompt(cls, input, output=""):
+        return cls.TEMPLATE.format(input=input, output=output)
 
     def generate_and_tokenize_prompt(self, data_point):
         """
@@ -134,14 +136,19 @@ class DatasetHandler:
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
 
-        train_data = (
-            train_val["train"]
-            .shuffle()
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
-        val_data = (
-            train_val["test"]
-            .shuffle()
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
-        return train_data, val_data
+        f = lambda x: self.generate_and_tokenize_prompt(x)
+        data = [train_val[slice].shuffle().map(f) for slice in ["train", "test"]]
+        return data[0], data[1]
+
+
+# class GPTDatasetHandler(DatasetHandler):
+#     def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
+#         super().__init__(dataset_name, tokenizer, data_dir)
+#         pass
+
+#     def generate_prompt(input, output="", template=template):
+#         return (
+#             """You are an expert in text summarization. You are given the full text."""
+#             """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+#             f"""### Input:\n{input}\n\n### Response:\n{output}"""
+#         )
