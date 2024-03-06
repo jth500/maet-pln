@@ -1,3 +1,31 @@
+class ModelEvaluator:
+    # Class to evaluate models. Includes Rouge, Bleu and Bert score.
+    # Input is a pair of lists of the generated summaries and the reference summaries.
+    def __init__(self, y_true: list, y_pred: list):
+        self.y_true = y_true
+        self.y_pred = y_pred
+        assert len(self.y_true) == len(self.y_pred), "y_true and y_pred must have the same length"
+
+    def rouge(self):
+        # TODO: Implement rouge evaluation
+        pass
+
+    def BERTscore(self):
+        # TODO: Implement  bert score
+        pass
+    def blue(self):
+        # TODO: Implement blue evaluation
+        pass
+    def eval_loss(self, loss_metric="rouge"):
+        LOSS_FUNCS = {"rouge": self.rouge, "bert": self.BERTscore}
+        return [LOSS_FUNCS[loss_metric](self.y_true[i], self.y_pred[i]) for i in range(len(self.y_true))]
+
+# use like this 
+    #evaluator = ModelEvaluator(y_true, y_pred)
+#losses = evaluator.eval_loss("rouge")
+    
+
+
 def rouge(y_true: str, y_pred: str) -> float:
     """Rouge loss function to be applied element wise.
 
