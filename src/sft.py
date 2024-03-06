@@ -38,6 +38,7 @@ class SFT:
                 "remove_unused_columns": True,
                 "report_to": "none",
                 "torch_compile": True,
+                "push_to_hub": True,
             }
             kwargs = update_kwargs(kwargs, defaults)
             self._training_config = TrainingArguments(**kwargs)
@@ -72,7 +73,6 @@ class SFT:
             args=self.training_config,
             train_dataset=train_dataset,
             data_collator=self._collator,
-            push_to_hub=True,
         )
         return self.trainer
 
