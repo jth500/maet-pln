@@ -14,7 +14,9 @@ class TokenizationHandler(ABC):
     @property
     def tokenizer(self):
         if self._tokenizer is None:
-            raise ValueError("Tokenizer has not been created")
+            raise ValueError(
+                "Tokenizer has not been created. Run TokenizationHandler.create_tokenizer()"
+            )
         return self._tokenizer
 
     @tokenizer.setter

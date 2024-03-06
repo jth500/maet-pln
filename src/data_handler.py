@@ -120,9 +120,19 @@ class DatasetHandler(ABC):
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
 
-        f = lambda x: self.generate_and_tokenize_prompt(x)
-        data = [train_val[slice].shuffle().map(f) for slice in ["train", "test"]]
-        return data[0], data[1]
+        # f = lambda x: self.generate_and_tokenize_prompt(x)
+        # data = [train_val[slice].shuffle().map(f) for slice in ["train", "test"]]
+        train_data = (
+            train_val["train"]
+            .shuffle()
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        val_data = (
+            train_val["test"]
+            .shuffle()
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        return train_data, val_data
 
 
 class T5DatasetHandler(DatasetHandler):
