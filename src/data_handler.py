@@ -103,7 +103,8 @@ class DatasetHandler(ABC):
             data_point["input"],
             data_point["output"],
         )
-        tokenized_full_prompt = self.tokenizer.tokenize(full_prompt)
+        # removed call to .tokenize - to check
+        tokenized_full_prompt = self.tokenizer(full_prompt)
         return tokenized_full_prompt
 
     def process_data(self):
