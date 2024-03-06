@@ -1,22 +1,21 @@
 from tqdm import tqdm
-from transformers import (TrainingArguments,
-                          Trainer)
+from transformers import TrainingArguments, Trainer
 
 from utils import update_kwargs
 
 
-class SFT():
+class SFT:
 
     def __init__(self, base_model, tokenizer, save_dir):
         self._save_dir = save_dir
         self.tokenizer = tokenizer
         self.base_model = base_model
-        self._training_config = None
-        self._trainer = None
-        
+        self.trainer = None
+        self.training_config = None
+
     def _collator(data):
         return dict((key, [d[key] for d in data]) for key in data[0])
-    
+
     @property
     def training_config(self, **kwargs):
         if self._training_config is None:
@@ -38,11 +37,15 @@ class SFT():
                 "disable_tqdm": False,
                 "remove_unused_columns": True,
                 "report_to": "none",
-                "torch_compile": True
+                "torch_compile": True,
             }
             kwargs = update_kwargs(kwargs, defaults)
             self._training_config = TrainingArguments(**kwargs)
         return self._training_config
+
+    @training_config.setter
+    def training_config(self, config):
+        self._training_config = config
 
     @property
     def trainer(self):
@@ -50,13 +53,17 @@ class SFT():
             self._trainer = self.create_trainer()
         return self._trainer
 
+    @trainer.setter
+    def trainer(self, trainer):
+        self._trainer = trainer
+
     def create_trainer(self, train_dataset):
         """
         Creates a trainer for the model.
-        
+
         Args:
             train_dataset (Dataset): The training dataset.
-            
+
         Returns:
             PPOTrainer: The created trainer.
         """
@@ -65,18 +72,18 @@ class SFT():
             args=self.training_config,
             train_dataset=train_dataset,
             data_collator=self._collator,
-            push_to_hub=True
-            )
-        return self._trainer
+            push_to_hub=True,
+        )
+        return self.trainer
 
     def train(self):
         """
         Trains the model.
-        
+
         Returns:
             None
         """
-        self._trainer.train()
+        self.trainer.train()
 
     def push_to_hub(self):
         """
@@ -85,5 +92,4 @@ class SFT():
         Returns:
             None
         """
-        self._trainer.push_to_hub()
-    
+        self.trainer.push_to_hub()

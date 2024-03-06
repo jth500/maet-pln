@@ -5,33 +5,32 @@ from trl import (
     PPOTrainer,
     PPOConfig,
     AutoModelForCausalLMWithValueHead,
-    create_reference_model
-    )
+    create_reference_model,
+)
 from trl.core import LengthSampler
 
 from utils import update_kwargs
 
 
-class RLAIF():
+class RLAIF:
 
     def __init__(self, base_dir, tokenizer, save_dir):
-        self.base_dir = base_dir # The base model is the SFT model
+        self.base_dir = base_dir  # The base model is the SFT model
         self.save_dir = save_dir
         self.tokenizer = tokenizer
         self.base_model = None
         self.ref_model = None
-        self._ppo_config = None
-        self._ppo_trainer = None
-        
-    
+        self.ppo_config = None
+        self.ppo_trainer = None
+
     @property
     def base_model(self):
         if self._base_model is None:
             self._base_model = self.load_base_model()
         return self._base_model
-    
+
     @base_model.setter
-    def model(self, base):
+    def base_model(self, base):
         self._base_model = base
 
     def load_base_model(self):
@@ -41,17 +40,23 @@ class RLAIF():
         Returns:
             The base model.
         """
-        self.base_model =  AutoModelForCausalLMWithValueHead.from_pretrained(self.base_dir)
+        self.base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
+            self.base_dir
+        )
         return self.base_model
 
     @property
-    def reference_model(self):
+    def ref_model(self):
         self._ref_model = create_reference_model(self.sft_model)
         return self._ref_model
 
+    @ref_model.setter
+    def ref_model(self, ref):
+        self._ref_model = ref
+
     def _collator(data):
         return dict((key, [d[key] for d in data]) for key in data[0])
-    
+
     @property
     def ppo_config(self, **kwargs):
         if self._ppo_config is None:
@@ -60,10 +65,15 @@ class RLAIF():
                 "learning_rate": 1e-5,
                 "ppo_epochs": 1,
                 "mini_batch_size": 1,
-                "batch_size": 2}
+                "batch_size": 2,
+            }
             kwargs = update_kwargs(kwargs, defaults)
             self._ppo_config = PPOConfig(**kwargs)
         return self._ppo_config
+
+    @ppo_config.setter
+    def ppo_config(self, config):
+        self._ppo_config = config
 
     @property
     def ppo_trainer(self):
@@ -74,10 +84,10 @@ class RLAIF():
     def create_ppo_trainer(self, train_dataset):
         """
         Creates a PPO trainer for the model.
-        
+
         Args:
             train_dataset (Dataset): The training dataset.
-            
+
         Returns:
             PPOTrainer: The created PPO trainer.
         """
@@ -88,8 +98,8 @@ class RLAIF():
             tokenizer=self.tokenizer,
             dataset=train_dataset,
             data_collator=self._collator,
-            push_to_hub=True
-            )
+            push_to_hub=True,
+        )
 
     def score_summaries(full_text, summarized_text):
         """
@@ -105,7 +115,8 @@ class RLAIF():
 
         import re
         import cohere
-        co = cohere.Client('ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz')
+
+        co = cohere.Client("ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz")
 
         score = 0
 
@@ -113,19 +124,23 @@ class RLAIF():
             format = f"""### FULL TEXT:\n {full_text} \n
             ### SUMMARIZED TEXT: \n {summarized_text}"""
 
-            response = co.generate(
-                model='command-nightly',
-                # Can this prompt be tailored to cohere's command-nightly model?
-                prompt=f"""You are an expert in text summarization. Below, you are given the full text and its summarization.
+            response = (
+                co.generate(
+                    model="command-nightly",
+                    # Can this prompt be tailored to cohere's command-nightly model?
+                    prompt=f"""You are an expert in text summarization. Below, you are given the full text and its summarization.
 
                 {format}
 
                 Your role is to rate the provided summarization with scores ranging from 0 to 1, where: 0 is the lowest score, 1 is the highest score.
                 Your response should only be a double precision number that represents the scoring rate.
                 """,
-                max_tokens=5,
-                temperature=0.9
-                ).generations[0].text
+                    max_tokens=5,
+                    temperature=0.9,
+                )
+                .generations[0]
+                .text
+            )
             score = float(re.findall(r"[-+]?(?:\d*\.*\d+)", response)[0])
         except:
             score = 0.5
@@ -155,12 +170,12 @@ class RLAIF():
             "temperature": 0.7,
             "min_length": 5,
             "top_p": 0.3,
-            "do_sample": True
+            "do_sample": True,
         }
 
-        objective_kl    = [] # KL divergence between the new and old policies
-        returns_mean    = [] # Mean of the returns
-        advantages_mean = [] # Mean of the advantages
+        objective_kl = []  # KL divergence between the new and old policies
+        returns_mean = []  # Mean of the returns
+        advantages_mean = []  # Mean of the advantages
 
         # PPO training loop
         for step, batch in tqdm(enumerate(self._ppo_trainer.dataloader)):
@@ -168,7 +183,7 @@ class RLAIF():
                 break
 
             # Decode the input_ids to get the prompts
-            prompts = [self._tokenizer.decode(input) for input in batch['input_ids']]
+            prompts = [self.tokenizer.decode(input) for input in batch["input_ids"]]
             prompt_tensors = batch["input_ids"]
 
             # Generate summary tensors
@@ -181,13 +196,15 @@ class RLAIF():
                 summary_tensors.append(summary.squeeze()[-max_new_tokens:])
 
             # Decode the summary tensors to get the summaries
-            batch["response"] = [self._tokenizer.decode(r.squeeze()) for r in summary_tensors]
+            batch["response"] = [
+                self.tokenizer.decode(r.squeeze()) for r in summary_tensors
+            ]
             response = batch["response"]
 
             # Compute the rewards
             reward_tensors = []
             for prompt, summary in zip(prompts, response):
-                score = self.score_summaries(prompt, response) # utilises cohere API
+                score = self.score_summaries(prompt, response)  # utilises cohere API
                 reward_tensors.append(torch.tensor(score))
 
             # Convert the lists to tensors
@@ -196,8 +213,10 @@ class RLAIF():
             reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
 
             # Step the PPO trainer
-            stats = self._ppo_trainer.step(prompt_tensors, summary_tensors, reward_tensors)
-            self._ppo_trainer.log_stats(stats, batch, reward_tensors)
+            stats = self._ppo_trainer.step(
+                prompt_tensors, summary_tensors, reward_tensors
+            )
+            self.ppo_trainer.log_stats(stats, batch, reward_tensors)
 
             # Log the stats
             objective_kl.append(stats["objective/kl"])
@@ -205,7 +224,6 @@ class RLAIF():
             advantages_mean.append(stats["ppo/policy/advantages_mean"])
 
         return objective_kl, returns_mean, advantages_mean
-    
 
     def push_to_hub(self):
         """
@@ -214,10 +232,4 @@ class RLAIF():
         Returns:
             None
         """
-        self._ppo_trainer.push_to_hub()
-    
-
-
-
-
-
+        self.ppo_trainer.push_to_hub()
