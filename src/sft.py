@@ -41,6 +41,7 @@ class SFT:
                 "remove_unused_columns": True,
                 "report_to": "none",
                 "torch_compile": True,
+                "push_to_hub": True,
             }
             kwargs = update_kwargs(kwargs, defaults)
             self._training_config = TrainingArguments(**kwargs)
@@ -79,7 +80,7 @@ class SFT:
                 pad_to_multiple_of=8, 
                 return_tensors="pt", 
                 padding=True
-        )
+            )
         )
         return self._trainer
 
