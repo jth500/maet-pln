@@ -6,7 +6,7 @@ from transformers import TrainingArguments, Trainer, DataCollatorForSeq2Seq
 from utils import update_kwargs
 
 
-class SFT():
+class SFT:
 
     def __init__(self, base_model, tokenizer, save_dir):
         self._save_dir = save_dir
@@ -40,11 +40,15 @@ class SFT():
                 "disable_tqdm": False,
                 "remove_unused_columns": True,
                 "report_to": "none",
-                "torch_compile": True
+                "torch_compile": True,
             }
             kwargs = update_kwargs(kwargs, defaults)
             self._training_config = TrainingArguments(**kwargs)
         return self._training_config
+
+    @training_config.setter
+    def training_config(self, config):
+        self._training_config = config
 
     @property
     def trainer(self):
@@ -52,13 +56,17 @@ class SFT():
             self._trainer = self.create_trainer()
         return self._trainer
 
+    @trainer.setter
+    def trainer(self, trainer):
+        self._trainer = trainer
+
     def create_trainer(self, train_dataset):
         """
         Creates a trainer for the model.
-        
+
         Args:
             train_dataset (Dataset): The training dataset.
-            
+
         Returns:
             PPOTrainer: The created trainer.
         """
@@ -78,11 +86,11 @@ class SFT():
     def train(self):
         """
         Trains the model.
-        
+
         Returns:
             None
         """
-        self._trainer.train()
+        self.trainer.train()
 
     def push_to_hub(self):
         """
