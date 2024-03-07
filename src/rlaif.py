@@ -20,10 +20,10 @@ class RLAIF():
         self.tokenizer = tokenizer
         self.base_model = None
         self.ref_model = None
-        self._ppo_config = None
-        self._ppo_trainer = None
-        
-    
+        self.ppo_config = None
+        self.ppo_trainer = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
     @property
     def base_model(self):
         if self._base_model is None:
@@ -41,14 +41,21 @@ class RLAIF():
         Returns:
             The base model.
         """
-        self.base_model =  AutoModelForCausalLMWithValueHead.from_pretrained(self.base_dir)
-        return self.base_model
+        base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
+            self.base_dir
+        )
+        return base_model
 
     @property
-    def reference_model(self):
-        self._ref_model = create_reference_model(self.sft_model)
+    def ref_model(self):
+        self._ref_model = create_reference_model(self.base_model)
         return self._ref_model
 
+    @ref_model.setter
+    def ref_model(self, ref):
+        self._ref_model = ref
+
+    @staticmethod
     def _collator(data):
         return dict((key, [d[key] for d in data]) for key in data[0])
     
@@ -65,11 +72,19 @@ class RLAIF():
             self._ppo_config = PPOConfig(**kwargs)
         return self._ppo_config
 
+    @ppo_config.setter
+    def ppo_config(self, ppo_config):
+        self._ppo_config = ppo_config
+
     @property
     def ppo_trainer(self):
         if self._ppo_trainer is None:
             self._ppo_trainer = self.create_ppo_trainer()
         return self._ppo_trainer
+    
+    @ppo_trainer.setter
+    def ppo_trainer(self, ppo_trainer):
+        self._ppo_trainer = ppo_trainer
 
     def create_ppo_trainer(self, train_dataset):
         """
@@ -82,15 +97,16 @@ class RLAIF():
             PPOTrainer: The created PPO trainer.
         """
         self._ppo_trainer = PPOTrainer(
-            config=self._ppo_config,
+            config=self.ppo_config,
             model=self.base_model,
             ref_model=self.ref_model,
             tokenizer=self.tokenizer,
             dataset=train_dataset,
             data_collator=self._collator,
-            push_to_hub=True
-            )
+        )
+        return self._ppo_trainer
 
+    @staticmethod
     def score_summaries(full_text, summarized_text):
         """
         Generates a score for the summarized text using the cohere API.
@@ -163,7 +179,7 @@ class RLAIF():
         advantages_mean = [] # Mean of the advantages
 
         # PPO training loop
-        for step, batch in tqdm(enumerate(self._ppo_trainer.dataloader)):
+        for step, batch in tqdm(enumerate(self.ppo_trainer.dataloader)):
             if step >= max_ppo_steps:
                 break
 
@@ -171,12 +187,13 @@ class RLAIF():
             prompts = [self._tokenizer.decode(input) for input in batch['input_ids']]
             prompt_tensors = batch["input_ids"]
 
+
             # Generate summary tensors
             summary_tensors = []
             for prompt_tensor in prompt_tensors:
                 max_new_tokens = output_length_sampler()
                 generation_kwargs["max_new_tokens"] = max_new_tokens
-                prompt_tensor = torch.tensor(prompt_tensor)
+                prompt_tensor = torch.tensor(prompt_tensor).to(self.device)
                 summary = self._ppo_trainer.generate(prompt_tensor, **generation_kwargs)
                 summary_tensors.append(summary.squeeze()[-max_new_tokens:])
 
@@ -196,8 +213,10 @@ class RLAIF():
             reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
 
             # Step the PPO trainer
-            stats = self._ppo_trainer.step(prompt_tensors, summary_tensors, reward_tensors)
-            self._ppo_trainer.log_stats(stats, batch, reward_tensors)
+            stats = self.ppo_trainer.step(
+                prompt_tensors, summary_tensors, reward_tensors
+            )
+            self.ppo_trainer.log_stats(stats, batch, reward_tensors)
 
             # Log the stats
             objective_kl.append(stats["objective/kl"])
@@ -214,10 +233,4 @@ class RLAIF():
         Returns:
             None
         """
-        self._ppo_trainer.push_to_hub()
-    
-
-
-
-
-
+        self.base_model.push_to_hub(self.save_dir)

@@ -1,6 +1,7 @@
 from tqdm import tqdm
-from transformers import (TrainingArguments,
-                          Trainer)
+import torch
+
+from transformers import TrainingArguments, Trainer, DataCollatorForSeq2Seq
 
 from utils import update_kwargs
 
@@ -11,12 +12,13 @@ class SFT():
         self._save_dir = save_dir
         self.tokenizer = tokenizer
         self.base_model = base_model
-        self._training_config = None
-        self._trainer = None
-        
-    def _collator(data):
-        return dict((key, [d[key] for d in data]) for key in data[0])
-    
+        self.trainer = None
+        self.training_config = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # def _collator(data):
+    #     return dict((key, [d[key] for d in data]) for key in data[0])
+
     @property
     def training_config(self, **kwargs):
         if self._training_config is None:
@@ -64,9 +66,13 @@ class SFT():
             model=self.base_model,
             args=self.training_config,
             train_dataset=train_dataset,
-            data_collator=self._collator,
-            push_to_hub=True
-            )
+            data_collator=DataCollatorForSeq2Seq(
+                self.tokenizer, 
+                pad_to_multiple_of=8, 
+                return_tensors="pt", 
+                padding=True
+        )
+        )
         return self._trainer
 
     def train(self):
@@ -85,5 +91,4 @@ class SFT():
         Returns:
             None
         """
-        self._trainer.push_to_hub()
-    
+        self.base_model.push_to_hub(self.save_dir)
