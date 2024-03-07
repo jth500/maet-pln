@@ -4,21 +4,22 @@ channels:
   - anaconda
   - conda-forge
   - defaults
+  - pip
 
 dependencies:
   - python==3.12
   - pandas
   - numpy
-  - torch
   - ipykernel
   - datasets # huggingface datasets (access to tl;dr dataset)
   - tqdm
   - python-dotenv
   - openai
   - transformers
-  - trl
-  - cohere
-  - re
-  - bitsandbytes
-  - evaluate
   - huggingface_hub
+  - pip
+  - pip:
+    - torch
+    - trl
+    - cohere
+    - bitsandbytes
