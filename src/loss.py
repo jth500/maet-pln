@@ -1,6 +1,5 @@
 from transformers import BertTokenizer, BertForMaskedLM, BertModel
 from bert_score import BERTScorer
-import tqdm
 import numpy as np
 
 class ModelEvaluator:
