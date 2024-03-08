@@ -1,7 +1,12 @@
+from transformers import BertTokenizer, BertForMaskedLM, BertModel
+from bert_score import BERTScorer
+import tqdm
+import numpy as np
+
 class ModelEvaluator:
     # Class to evaluate models. Includes Rouge, Bleu and Bert score.
     # Input is a pair of lists of the generated summaries and the reference summaries.
-    def __init__(self, y_true: list, y_pred: list):
+    def __init__(self, y_true: list, y_pred: list, batch_size: int = 30):
         self.y_true = y_true
         self.y_pred = y_pred
         assert len(self.y_true) == len(self.y_pred), "y_true and y_pred must have the same length"
@@ -11,8 +16,23 @@ class ModelEvaluator:
         pass
 
     def BERTscore(self):
-        # TODO: Implement  bert score
-        pass
+        scores = {"f1": [], "p": [], "r": []}
+        scorer = BERTScorer(model_type='bert-base-uncased')
+
+        for i in range(0, len(self.y_pred), self.batch_size):
+            pred_batches = self.y_pred[i:i+self.batch_size]
+            true_batches = self.y_true[i:i+self.batch_size]
+            P, R, F1 = scorer.score(true_batches, pred_batches)
+
+            scores["f1"].append(F1.numpy())
+            scores["p"].append(P.numpy())
+            scores["r"].append(R.numpy())
+
+        scores_mean = {key: np.mean(value) for key, value in scores.items()}
+        scores_var = {key: np.var(value) for key, value in scores.items()}
+
+        return scores_mean, scores_var, np.array(scores)
+
     def blue(self):
         # TODO: Implement blue evaluation
         pass
