@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
-# TODO: Load dataset is called a couple of times
 class DatasetHandler(ABC):
     """
     A class used to handle the dataset used for training the model.
@@ -53,10 +52,8 @@ class DatasetHandler(ABC):
 
     @tokenizer.setter
     def tokenizer(self, tk):
-        if tk is None:
-            raise Exception("Must pass in a tokenizer at initialisation")
-        else:
-            self._tokenizer = tk
+        assert tk is not None
+        self._tokenizer = tk
 
     def _data_to_json(self):
         """
@@ -160,3 +157,23 @@ class T5DatasetHandler(DatasetHandler):
 #             """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
 #             f"""### Input:\n{input}\n\n### Response:\n{output}"""
 #         )
+
+if __name__ == "__main__":
+    import sys
+    import os
+    from pathlib import Path
+
+    CWD = Path(os.path.dirname(os.path.realpath(__file__)))
+    SRC = CWD.parent / "src"
+    sys.path.append(str(CWD))
+
+    from tokenization import T5TokenizationHandler
+
+    tokenizer = T5TokenizationHandler(model_id="t5-small").create_tokenizer()
+    DATASET_NAME = "CarperAI/openai_summarize_tldr"
+    data_handler = T5DatasetHandler(DATASET_NAME, tokenizer)
+    prompt = "Hello there"
+    tokenized_prompt = data_handler.generate_and_tokenize_prompt(
+        {"input": prompt, "output": prompt}
+    )
+    pass
