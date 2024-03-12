@@ -42,10 +42,10 @@ class TokenizationHandler(ABC):
 
     def create_tokenizer(self, **kwargs):
         # TODO: This stuff will probably be model specific
-        try:
-            tokenizer = self.tokenizer
-        except ValueError:
-            tokenizer = self._create_tokenizer(**kwargs)
+        # try:
+        #     tokenizer = self.tokenizer
+        # except ValueError:
+        tokenizer = self._create_tokenizer(**kwargs)
 
         # config stuff
         # NB: This was originally after Data Cell
@@ -84,6 +84,13 @@ class TokenizationHandler(ABC):
 
 
 class T5TokenizationHandler(TokenizationHandler):
-    def __init__(self):
-        super().__init__(model_id="t5-large")
+    def __init__(self, model_id="t5-base"):
+        super().__init__(model_id)
         pass
+
+
+if __name__ == "__main__":
+    tk = T5TokenizationHandler(model_id="t5-small")
+    tokenizer = tk.create_tokenizer()
+    out = tk.tokenize("Hi")
+    out

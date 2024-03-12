@@ -79,5 +79,6 @@ class ModelBuilder(ABC):
 
 
 class T5ModelBuilder(ModelBuilder):
-    def __init__(self):
-        super().__init__(model_id="t5-large", model_type=AutoModelForSeq2SeqLM)
+    def __init__(self, model_id="t5-base"):
+        assert "t5" in model_id
+        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM)
