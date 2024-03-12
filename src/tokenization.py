@@ -35,7 +35,7 @@ class TokenizationHandler(ABC):
         Returns:
             tokenizer: The created tokenizer.
         """
-        defaults = dict(model_max_length=512, truncation=True, padding=True)
+        defaults = dict(model_max_length=512, truncation=True, padding=True) 
         kwargs = update_kwargs(kwargs, defaults)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
         return self.tokenizer
@@ -48,16 +48,6 @@ class TokenizationHandler(ABC):
         tokenizer = self._create_tokenizer(**kwargs)
 
         # config stuff
-        # NB: This was originally after Data Cell
-        tokenizer.pad_token = tokenizer.eos_token  # end-of-sequence (eos) padding
-        # self.base_model.resize_token_embeddings(
-        #     len(tokenizer)
-        # )  # resize to embeddings to match updated tokenizer
-        tokenizer.pad_token_id = (
-            tokenizer.eos_token_id
-        )  # set id of padding token to be id of eos token
-        # self.base_model.config.end_token_id = tokenizer.eos_token_id
-        # self.base_model.config.pad_token_id = self.base_model.config.eos_token_id
         self.tokenizer = tokenizer
         return tokenizer
 
@@ -79,7 +69,7 @@ class TokenizationHandler(ABC):
         }
         kwargs = update_kwargs(kwargs, defaults)
         result = self.tokenizer(prompt, **kwargs)
-        result["labels"] = result["input_ids"].copy()
+        result["labels"] = result["input_ids"].copy() 
         return result
 
 
@@ -90,7 +80,31 @@ class T5TokenizationHandler(TokenizationHandler):
 
 
 if __name__ == "__main__":
-    tk = T5TokenizationHandler(model_id="t5-small")
+    tk = T5TokenizationHandler(model_id="t5-small") #small ???
     tokenizer = tk.create_tokenizer()
     out = tk.tokenize("Hi")
     out
+
+class BartTokenizationHandler(TokenizationHandler):
+    def __init__(self, model_id="facebook/bart-large"):
+        super().__init__(model_id)
+    def tokenize(self, prompt, text_target=None, **kwargs):
+        """
+        Tokenizes the given text and optional target using the tokenizer.
+
+        Args:
+            prompt (str): The text to be tokenized.
+            text_target (str, optional): The target text for given prompt i.e. summary. Used at finetuning step but not during inference.
+
+        Returns:
+            dict: A dictionary containing the tokenized text and labels.
+        """
+        defaults = {
+            "truncation": True,
+            "max_length": 512,
+            "padding": False,
+            "return_tensors": None,
+        }
+        kwargs = update_kwargs(kwargs, defaults)
+
+        return self.tokenizer(prompt, text_target = text_target, **kwargs)

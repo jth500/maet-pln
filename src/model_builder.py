@@ -82,3 +82,8 @@ class T5ModelBuilder(ModelBuilder):
     def __init__(self, model_id="t5-base"):
         assert "t5" in model_id
         super().__init__(model_id, model_type=AutoModelForSeq2SeqLM)
+
+class BartModelBuilder(ModelBuilder):
+    def __init__(self, model_id="facebook/bart-large"):
+        assert "bart" in model_id
+        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM)
