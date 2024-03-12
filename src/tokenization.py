@@ -35,29 +35,17 @@ class TokenizationHandler(ABC):
         Returns:
             tokenizer: The created tokenizer.
         """
-        defaults = dict(model_max_length=512, truncation=True, padding=True)
+        defaults = dict(
+            model_max_length=512, 
+            truncation=True, 
+            padding=True
+            )
         kwargs = update_kwargs(kwargs, defaults)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
         return self.tokenizer
 
     def create_tokenizer(self, **kwargs):
-        # TODO: This stuff will probably be model specific
-        # try:
-        #     tokenizer = self.tokenizer
-        # except ValueError:
         tokenizer = self._create_tokenizer(**kwargs)
-
-        # config stuff
-        # NB: This was originally after Data Cell
-        tokenizer.pad_token = tokenizer.eos_token  # end-of-sequence (eos) padding
-        # self.base_model.resize_token_embeddings(
-        #     len(tokenizer)
-        # )  # resize to embeddings to match updated tokenizer
-        tokenizer.pad_token_id = (
-            tokenizer.eos_token_id
-        )  # set id of padding token to be id of eos token
-        # self.base_model.config.end_token_id = tokenizer.eos_token_id
-        # self.base_model.config.pad_token_id = self.base_model.config.eos_token_id
         self.tokenizer = tokenizer
         return tokenizer
 
@@ -86,8 +74,31 @@ class TokenizationHandler(ABC):
 class T5TokenizationHandler(TokenizationHandler):
     def __init__(self, model_id="t5-base"):
         super().__init__(model_id)
-        pass
 
+
+class GPT2TokenizationHandler(TokenizationHandler):
+    def __init__(self):
+        super().__init__(model_id="gpt2-medium")
+
+    def _create_tokenizer(self, **kwargs):
+        defaults = dict(
+            eos_token="<|endoftext|>",
+            bos_token="<|startoftext|>",
+            pad_token="<|pad|>",
+            model_max_length=2096
+            )
+        kwargs = update_kwargs(kwargs, defaults)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
+        return self.tokenizer
+    
+    def create_tokenizer(self, **kwargs):
+        try:
+            tokenizer = self.tokenizer
+        except ValueError:
+            tokenizer = self._create_tokenizer(**kwargs)
+        tokenizer.padding_side = "right"
+        self.tokenizer = tokenizer
+        return tokenizer
 
 if __name__ == "__main__":
     tk = T5TokenizationHandler(model_id="t5-small")

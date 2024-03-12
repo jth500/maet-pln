@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
+from utils import update_kwargs
 
 class DatasetHandler(ABC):
     """
@@ -83,6 +84,28 @@ class DatasetHandler(ABC):
 
     def generate_prompt(self, input, output=""):
         return self.template.format(input=input, output=output)
+    
+    def tokenize(self, prompt, **kwargs):
+        """
+        Tokenizes the given prompt using the tokenizer.
+
+        Args:
+            prompt (str): The prompt to be tokenized.
+
+        Returns:
+            dict: A dictionary containing the tokenized prompt and labels.
+        """
+        defaults = dict(
+            truncation=True,
+            max_length=2048,
+            padding=False,
+            return_tensors=None
+            )
+        kwargs = update_kwargs(kwargs, defaults)
+        result = self.tokenizer(prompt, **kwargs)
+        result["labels"] = result["input_ids"].copy()
+
+        return result
 
     def generate_and_tokenize_prompt(self, data_point):
         """
@@ -98,10 +121,10 @@ class DatasetHandler(ABC):
         """
         full_prompt = self.generate_prompt(
             data_point["input"],
-            data_point["output"],
+            data_point["output"]
         )
-        # removed call to .tokenize - to check
-        tokenized_full_prompt = self.tokenizer(full_prompt)
+        tokenized_full_prompt = self.tokenize(full_prompt)
+
         return tokenized_full_prompt
 
     def process_data(self):
@@ -112,14 +135,11 @@ class DatasetHandler(ABC):
             train_data (Dataset): Processed training data.
             val_data (Dataset): Processed validation data.
         """
-        # dataset = load_dataset(self.dataset_name, split="train")  # why called twice?# it's not used?
         self._data_to_json()
 
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
 
-        # f = lambda x: self.generate_and_tokenize_prompt(x)
-        # data = [train_val[slice].shuffle().map(f) for slice in ["train", "test"]]
         train_data = (
             train_val["train"]
             .shuffle()
@@ -146,17 +166,24 @@ class T5DatasetHandler(DatasetHandler):
         )
 
 
-# class GPTDatasetHandler(DatasetHandler):
-#     def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
-#         super().__init__(dataset_name, tokenizer, data_dir)
-#         pass
+class GPT2DatasetHandler(DatasetHandler):
+    def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
+        super().__init__(dataset_name, tokenizer, data_dir)
+        pass
 
-#     def generate_prompt(input, output="", template=template):
-#         return (
-#             """You are an expert in text summarization. You are given the full text."""
-#             """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
-#             f"""### Input:\n{input}\n\n### Response:\n{output}"""
-#         )
+    @property
+    def template(self):
+        return (
+            """You are an expert in text summarization. You are given the full text."""
+            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+            """### Input:\n{input}\n\n### Response:\n{output}"""
+        )
+    
+    def generate_prompt(self, input, output=""):
+        if output:
+            output = output + self.tokenizer.eos_token
+        return self.tokenizer.bos_token + self.template.format(input=input, output=output)
+    
 
 if __name__ == "__main__":
     import sys
