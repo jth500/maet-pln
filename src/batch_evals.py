@@ -6,7 +6,11 @@ pip install bert-score
 from transformers import BertTokenizer, BertForMaskedLM, BertModel
 from bert_score import BERTScorer
 from rouge_score import rouge_scorer
+from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import sentence_bleu
 import numpy as np
+import nltk
+
 
 def BERTScore_batches(pred, true, batch_size = 30):
 
