@@ -23,7 +23,7 @@ class TokenizationHandler(ABC):
     def tokenizer(self, tk):
         self._tokenizer = tk
 
-    def _create_tokenizer(self, **kwargs):
+    def _init_tokenizer(self, defaults={}, **kwargs):
         """
         Creates a tokenizer for the model.
 
@@ -35,73 +35,47 @@ class TokenizationHandler(ABC):
         Returns:
             tokenizer: The created tokenizer.
         """
-        defaults = dict(
-            model_max_length=512, 
-            truncation=True, 
-            padding=True
-            )
         kwargs = update_kwargs(kwargs, defaults)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
         return self.tokenizer
+
+    def _create_tokenizer(self, **kwargs):
+        defaults = {}
+        return self._init_tokenizer(defaults, **kwargs)
 
     def create_tokenizer(self, **kwargs):
         tokenizer = self._create_tokenizer(**kwargs)
         self.tokenizer = tokenizer
         return tokenizer
 
-    def tokenize(self, prompt, **kwargs):
-        """
-        Tokenizes the given prompt using the tokenizer.
-
-        Args:
-            prompt (str): The prompt to be tokenized.
-
-        Returns:
-            dict: A dictionary containing the tokenized prompt and labels.
-        """
-        defaults = {
-            "truncation": True,
-            "max_length": 512,
-            "padding": False,
-            "return_tensors": None,
-        }
-        kwargs = update_kwargs(kwargs, defaults)
-        result = self.tokenizer(prompt, **kwargs)
-        result["labels"] = result["input_ids"].copy()
-        return result
-
 
 class T5TokenizationHandler(TokenizationHandler):
-    def __init__(self, model_id="t5-base"):
+    # def __init__(self, model_id="t5-base"):
+    def __init__(self, model_id="t5-small"):
         super().__init__(model_id)
 
 
 class GPT2TokenizationHandler(TokenizationHandler):
-    def __init__(self):
-        super().__init__(model_id="gpt2-medium")
+    def __init__(self, model_id="gpt2-medium"):
+        super().__init__(model_id)
 
     def _create_tokenizer(self, **kwargs):
         defaults = dict(
             eos_token="<|endoftext|>",
             bos_token="<|startoftext|>",
             pad_token="<|pad|>",
-            model_max_length=2096
-            )
-        kwargs = update_kwargs(kwargs, defaults)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
-        return self.tokenizer
-    
-    def create_tokenizer(self, **kwargs):
-        try:
-            tokenizer = self.tokenizer
-        except ValueError:
-            tokenizer = self._create_tokenizer(**kwargs)
-        tokenizer.padding_side = "right"
-        self.tokenizer = tokenizer
-        return tokenizer
+            model_max_length=2096,
+            padding_side="right",
+        )
+        return self._init_tokenizer(defaults, **kwargs)
+
 
 if __name__ == "__main__":
-    tk = T5TokenizationHandler(model_id="t5-small")
-    tokenizer = tk.create_tokenizer()
-    out = tk.tokenize("Hi")
-    out
+    # tk = T5TokenizationHandler(model_id="t5-small")
+    # tokenizer = tk.create_tokenizer()
+    # out = tk.tokenize("Hi")
+    # out
+
+    tk = GPT2TokenizationHandler(model_id="gpt2")
+    tk = tk.create_tokenizer(test_addition=100)
+    pass
