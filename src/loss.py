@@ -1,7 +1,7 @@
-from transformers import BertTokenizer, BertForMaskedLM, BertModel
 from bert_score import BERTScorer
 from rouge_score import rouge_scorer
 import numpy as np
+from typing import List, Callable
 
 class ModelEvaluator:
     # Class to evaluate models. Includes Rouge, Bleu and Bert score.
@@ -10,99 +10,82 @@ class ModelEvaluator:
         self.BERTscorer = BERTScorer(model_type='bert-base-uncased')
         self.rouge_scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
 
-    def rouge_scorer(self, y_pred, y_true, batch_size = 32):
-        # TODO: Implement rouge evaluation
-        pass
-        assert len(self.y_true) == len(self.y_pred), "y_true and y_pred must have the same length"
-
-    def BERTscore(self, y_pred, y_true, batch_size = 32):
-        scorer = self.BERTscorer
-        scores = {"f1": [], "p": [], "r": []}
-        for i in range(0, len(self.y_pred), self.batch_size):
-            pred_batches = self.y_pred[i:i+self.batch_size]
-            true_batches = self.y_true[i:i+self.batch_size]
-            P, R, F1 = scorer.score(true_batches, pred_batches)
-
-            scores["f1"].append(F1.numpy())
-            scores["p"].append(P.numpy())
-            scores["r"].append(R.numpy())
-
-        scores_mean = {key: np.mean(value) for key, value in scores.items()}
-        scores_var = {key: np.var(value) for key, value in scores.items()}
-
-        return scores_mean, scores_var, np.array(scores)
-
-    def blue(self):
-        # TODO: Implement blue evaluation
-        pass
-    def eval_loss(self, loss_metric="rouge"):
-        LOSS_FUNCS = {"rouge": self.rouge, "bert": self.BERTscore}
-        return [LOSS_FUNCS[loss_metric](self.y_true[i], self.y_pred[i]) for i in range(len(self.y_true))]
-
-# use like this 
-    #evaluator = ModelEvaluator(y_true, y_pred)
-#losses = evaluator.eval_loss("rouge")
+    def rouge_score(self, y_pred, y_true):
     
+        """Rouge loss function to be applied element wise.
+
+        Args:
+            y_true (str): True value.
+            y_pred (str): Predicted value.
+
+        Returns:
+            float: Loss value.
+        """
+        scorer = self.rouge_scorer
+        scores = scorer.score(y_true, y_pred)
+
+        precision = [scores['rouge1'].precision, scores['rouge2'].precision, scores['rougeL'].precision]
+        recall = [scores['rouge1'].recall, scores['rouge2'].recall, scores['rougeL'].recall]
+        f1_score = [scores['rouge1'].fmeasure, scores['rouge2'].fmeasure, scores['rougeL'].fmeasure]
+
+        return precision, recall, f1_score
+    def BERTscore(self, y_pred, y_true):
+        scorer = self.BERTscorer
+        # scores = {"f1": [], "p": [], "r": []}
+        # for i in range(0, len(self.y_pred), self.batch_size):
+        #     pred_batches = self.y_pred[i:i+self.batch_size]
+        #     true_batches = self.y_true[i:i+self.batch_size]
+        #     P, R, F1 = scorer.score(true_batches, pred_batches)
+
+        #     scores["f1"].append(F1.numpy())
+        #     scores["p"].append(P.numpy())
+        #     scores["r"].append(R.numpy())
+
+        # scores_mean = {key: np.mean(value) for key, value in scores.items()}
+        # scores_var = {key: np.var(value) for key, value in scores.items()}
+
+        
+        # return scores_mean, scores_var, np.array(scores)
+        P, R, F1 = scorer.score([y_true], [y_pred])
+
+        precision = round(P.mean().item(),4)
+        recall = round(R.mean().item(),4)
+        F1 = round(F1.mean().item(),4)
+        return precision, recall, F1
+    
+    #https://github.com/Tiiiger/bert_score/tree/master/example 
+    # dont know why we cant just use the score function from the library
+    # why is bert rounded but not rouge.
+    # is bert input lists?
+    # why not using robert large? 
 
 
-def rouge(y_true: str, y_pred: str) -> float:
-    """Rouge loss function to be applied element wise.
+    def batchify(self, data: List, batch_size: int):
+        """Split a list into batches."""
+        return [data[i:i + batch_size] for i in range(0, len(data), batch_size)]
 
-    Args:
-        y_true (str): True value.
-        y_pred (str): Predicted value.
+    def evaluation(self, y_true: List[str], y_pred: List[str], loss_func: Callable, batch_size: int = 32) -> List:
+        """Apply chosen loss metric to each batch of elements.
 
-    Returns:
-        float: Loss value.
-    """
-    # TODO: Implement rouge loss
-    # Not sure if inputs should be strings or tokenised lists?? Haven't looked at this at all
-    # presumably there's a library for this?
-    return None
+        Args:
+            y_true (List[str]): List of true values.
+            y_pred (List[str]): List of predicted values.
+            loss_func (Callable): Loss function to apply.
+            batch_size (int, optional): Batch size. Defaults to 32.
 
-
-def other_loss_metric(y_true: str, y_pred: str) -> float:
-    # TODO
-    pass
-
-
-def eval_loss(y_true: list, y_pred: list, loss_metric="rouge") -> list:
-    """Apply chosen loss metric to each element in the batch
-
-    Args:
-        y_true (list): List of true values.
-        y_pred (list): List of predicted values.
-
-    Returns:
-        list: List of losses for each element in the batch.
-    """
-    # TODO: Vectorize this (if possible)
-    LOSS_FUNCS = {"rouge": rouge, "other": other_loss_metric}
-    assert len(y_true) == len(y_pred), "y_true and y_pred must have the same length"
-    return [LOSS_FUNCS[loss_metric](y_true[i], y_pred[i]) for i in range(len(y_true))]
-
-
-def test_rouge():
-    """
-    Test the rouge function.
-
-    This function tests the rouge function by comparing the output of the function
-    with expected values. It asserts that the calculated rouge score matches the
-    expected score for different input strings.
-
-    Returns:
-        None
-    """
-    y_true = "This is a test"
-    y_pred = "This is a test"
-    assert rouge(y_true, y_pred) == 1.0  # guessing this is the expected value?
-    y_pred = "This is not a test"
-    assert rouge(y_true, y_pred) == 0.0
-    y_pred = ""
-
-    y_list = ["This is a test", "This is a test", "This is a test"]
-    assert eval_loss(y_list, y_list) == [1.0, 1.0, 1.0]
-
-
-if __name__ == "__main__":
-    test_rouge()
+        Returns:
+            List: List of losses for each batch.
+        """
+        assert len(y_true) == len(y_pred), "y_true and y_pred must have the same length"
+        
+        # Split data into batches
+        y_true_batches = self.batchify(y_true, batch_size)
+        y_pred_batches = self.batchify(y_pred, batch_size)
+        
+          # Apply loss function to each pair in each batch
+        losses = []
+        for y_true_batch, y_pred_batch in zip(y_true_batches, y_pred_batches):
+            batch_losses = [loss_func(y_true_item, y_pred_item) for y_true_item, y_pred_item in zip(y_true_batch, y_pred_batch)]
+            losses.extend(batch_losses)
+        
+        return losses
