@@ -6,7 +6,6 @@ pip install bert-score
 from transformers import BertTokenizer, BertForMaskedLM, BertModel
 from bert_score import BERTScorer
 from rouge_score import rouge_scorer
-import tqdm
 import numpy as np
 
 def BERTScore_batches(pred, true, batch_size = 30):
@@ -95,4 +94,38 @@ def rouge_batches(pred, true, batch_size = 30):
     scores_vars = [f1_var, p_var, r_var]
 
     return scores_means, scores_vars, np.array(scores)
-    
+
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+
+def BLEUScore_batches(pred, true, batch_size=30):
+    scores = []
+
+    for i in range(0, len(pred), batch_size):
+        pred_batches = pred[i:i+batch_size]
+        true_batches = true[i:i+batch_size]
+
+        # Compute BLEU score for each batch
+        batch_bleu_scores = []
+
+        for pred_sent, true_sent in zip(pred_batches, true_batches):
+
+            # Tokenize 
+            pred_sent_tokens = pred_sent.split()
+            true_sents_tokens = [true_sent.split()]
+
+            # Compute BLEU score for the current pair of sentences
+            smoothing = SmoothingFunction().method1  #smoothing 
+            if len(true_sents_tokens[0]) < 4:
+                # If length of reference sentence is less than 4, reset N value
+                score = sentence_bleu(true_sents_tokens, pred_sent_tokens, 
+                                      smoothing_function=smoothing, 
+                                      weights=(1/len(true_sents_tokens[0]),) * len(true_sents_tokens[0]))
+            else:
+                score = sentence_bleu(true_sents_tokens, pred_sent_tokens, smoothing_function=smoothing)
+            batch_bleu_scores.append(score)
+        scores.extend(batch_bleu_scores)
+
+    scores_mean = np.mean(scores)
+    scores_var = np.var(scores)
+
+    return scores_mean, scores_var, np.array(scores)
