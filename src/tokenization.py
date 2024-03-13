@@ -67,7 +67,7 @@ class TokenizationHandler(ABC):
         }
         kwargs = update_kwargs(kwargs, defaults)
         result = self.tokenizer(prompt, **kwargs)
-        result["labels"] = result["input_ids"].copy()
+        result["labels"] = result["input_ids"].copy() 
         return result
 
 
@@ -101,7 +101,31 @@ class GPT2TokenizationHandler(TokenizationHandler):
         return tokenizer
 
 if __name__ == "__main__":
-    tk = T5TokenizationHandler(model_id="t5-small")
+    tk = T5TokenizationHandler(model_id="t5-small") #small ???
     tokenizer = tk.create_tokenizer()
     out = tk.tokenize("Hi")
     out
+
+class BartTokenizationHandler(TokenizationHandler):
+    def __init__(self, model_id="facebook/bart-large"):
+        super().__init__(model_id)
+    def tokenize(self, prompt, text_target=None, **kwargs):
+        """
+        Tokenizes the given text and optional target using the tokenizer.
+
+        Args:
+            prompt (str): The text to be tokenized.
+            text_target (str, optional): The target text for given prompt i.e. summary. Used at finetuning step but not during inference.
+
+        Returns:
+            dict: A dictionary containing the tokenized text and labels.
+        """
+        defaults = {
+            "truncation": True,
+            "max_length": 512,
+            "padding": False,
+            "return_tensors": None,
+        }
+        kwargs = update_kwargs(kwargs, defaults)
+
+        return self.tokenizer(prompt, text_target = text_target, **kwargs)

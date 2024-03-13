@@ -103,3 +103,8 @@ class T5ModelBuilder(ModelBuilder):
 class GPT2ModelBuilder(ModelBuilder):
     def __init__(self, tokenizer):
         super().__init__(model_id="gpt2-medium", model_type=AutoModelForCausalLM, tokenizer=tokenizer)
+
+class BartModelBuilder(ModelBuilder):
+    def __init__(self, model_id="facebook/bart-large"):
+        assert "bart" in model_id
+        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM)
