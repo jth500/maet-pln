@@ -103,7 +103,7 @@ class DatasetHandler(ABC):
             )
         kwargs = update_kwargs(kwargs, defaults)
         result = self.tokenizer(prompt, **kwargs)
-        result["labels"] = result["input_ids"].copy()
+     #   result["labels"] = result["input_ids"].copy() # this is only done for GPT2. T5 AND BART need summary as label
 
         return result
 
@@ -150,6 +150,7 @@ class DatasetHandler(ABC):
             .shuffle()
             .map(lambda x: self.generate_and_tokenize_prompt(x))
         )
+
         return train_data, val_data
 
 
@@ -184,6 +185,56 @@ class GPT2DatasetHandler(DatasetHandler):
             output = output + self.tokenizer.eos_token
         return self.tokenizer.bos_token + self.template.format(input=input, output=output)
     
+    def tokenize(self, prompt, **kwargs):
+        """
+        Tokenizes the given prompt using the tokenizer.
+
+        Args:
+            prompt (str): The prompt to be tokenized.
+
+        Returns:
+            dict: A dictionary containing the tokenized prompt and labels.
+        """
+        defaults = dict(
+            truncation=True,
+            max_length=2048,
+            padding=False,
+            return_tensors=None
+            )
+        kwargs = update_kwargs(kwargs, defaults)
+        result = self.tokenizer(prompt, **kwargs)
+        result["labels"] = result["input_ids"].copy() 
+
+        return result
+
+class BartDatasetHandler(DatasetHandler):
+    def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
+        super().__init__(dataset_name, tokenizer, data_dir)
+        pass
+
+    @property
+    def template(self):
+        return ("""Summarize the following document:\n\n{input}\n\nSummary:\n{output}""")
+
+    def generate_and_tokenize_prompt(self, data_point):
+        """
+        Generates a full prompt using the input and output from the given data point,
+        and then tokenizes the full prompt using the provided tokenizer.
+
+        Args:
+            data_point (dict): A dictionary containing the input and output data.
+            tokenizer: The tokenizer object used for tokenization.
+
+        Returns:
+            tokenized_full_prompt: The tokenized version of the full prompt.
+        """
+        full_prompt = self.generate_prompt(
+            data_point["output"]
+        )
+        #Setting the output as the label for BART
+        tokenized_full_prompt = self.tokenize(full_prompt, text_target= data_point['output'])
+
+        return tokenized_full_prompt
 
 if __name__ == "__main__":
     import sys

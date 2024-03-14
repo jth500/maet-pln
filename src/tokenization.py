@@ -53,9 +53,21 @@ class GPT2TokenizationHandler(TokenizationHandler):
             bos_token="<|startoftext|>",
             pad_token="<|pad|>",
             model_max_length=2096,
-            padding_side="right",
+            padding_side="right"
         )
         return self._init_tokenizer(defaults, **kwargs)
+
+class BartTokenizationHandler(TokenizationHandler):
+    def __init__(self, model_id="facebook/bart-base"):
+        super().__init__(model_id)
+
+    def _create_tokenizer(self, **kwargs):
+        defaults = dict(
+            model_max_length=2096,
+            padding_side="right")
+        return self._init_tokenizer(defaults, **kwargs)
+
+
 
 
 if __name__ == "__main__":
@@ -67,3 +79,4 @@ if __name__ == "__main__":
     tk = GPT2TokenizationHandler(model_id="gpt2")
     tk = tk.create_tokenizer(test_addition=100)
     pass
+
