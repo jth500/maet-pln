@@ -30,10 +30,11 @@ class SFT:
 
     def create_training_config(self, **kwargs):
         defaults = dict(
-            output_dir = self._save_dir,
+            output_dir = "/tmp",
             push_to_hub = True,
+            push_to_hub_model_id = self._save_dir,
             warmup_steps = 0.1,
-            num_train_epochs=1,
+            num_train_epochs=4,
             # max_steps = 200,
             per_device_train_batch_size = 1,
             # per_device_eval_batch_size = 1,
@@ -69,7 +70,7 @@ class SFT:
             train_dataset=self.train_dataset,  # Set your actual train_dataset here
             data_collator=DataCollatorForSeq2Seq(
                 self.tokenizer, 
-                pad_to_multiple_of=8, 
+                pad_to_multiple_of=4, 
                 return_tensors="pt",
                 padding=True
             )
@@ -78,6 +79,7 @@ class SFT:
 
     def train_model(self):
         self.trainer.train()
+        return self.trainer
 
     def push_model_to_hub(self):
         """
@@ -86,4 +88,4 @@ class SFT:
         Returns:
             None
         """
-        self.base_model.push_to_hub(self.save_dir)
+        self.base_model.push_to_hub(self._save_dir)
