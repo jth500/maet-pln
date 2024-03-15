@@ -14,7 +14,7 @@ from utils import update_kwargs
 
 class RLAIF:
 
-    def __init__(self, base_dir, tokenizer, save_dir):
+    def __init__(self, base_dir, tokenizer, save_dir, train_dataset):
         self.base_dir = base_dir  # The base model is the SFT model
         self.save_dir = save_dir
         self.tokenizer = tokenizer
@@ -22,6 +22,7 @@ class RLAIF:
         self.ref_model = None
         self.ppo_config = None
         self.ppo_trainer = None
+        self.train_dataset = train_dataset
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     @property
@@ -87,7 +88,7 @@ class RLAIF:
     def ppo_trainer(self, ppo_trainer):
         self._ppo_trainer = ppo_trainer
 
-    def create_ppo_trainer(self, train_dataset):
+    def create_ppo_trainer(self):
         """
         Creates a PPO trainer for the model.
 
@@ -102,7 +103,7 @@ class RLAIF:
             model=self.base_model,
             ref_model=self.ref_model,
             tokenizer=self.tokenizer,
-            dataset=train_dataset,
+            dataset=self.train_dataset,
             data_collator=self._collator,
         )
         return self._ppo_trainer
@@ -143,7 +144,7 @@ class RLAIF:
                 Your response should only be a double precision number that represents the scoring rate.
                 """,
                     max_tokens=5,
-                    temperature=0.9,
+                    temperature=0.1,
                 )
                 .generations[0]
                 .text
@@ -154,12 +155,12 @@ class RLAIF:
 
         return score
 
-    def train(self, max_ppo_steps=100):
+    def train_model(self, max_ppo_steps=float('inf')):
         """
         Trains the model using PPO.
 
         Args:
-            max_ppo_steps (int, optional): The maximum number of PPO steps. Defaults to 100.
+            max_ppo_steps (int, optional): The maximum number of PPO steps. Defaults to inf (i.e. length of epoch).
 
         Returns:
             list: The KL divergence between the new and old policies.
@@ -168,16 +169,18 @@ class RLAIF:
         """
 
         # Min and max length of the summaries
-        output_min_length = 10
-        output_max_length = 150
-        output_length_sampler = LengthSampler(output_min_length, output_max_length)
+        # output_min_length = 1
+        # output_max_length = 50
+        # output_length_sampler = LengthSampler(output_min_length, output_max_length)
 
         # Generation kwargs
         generation_kwargs = {
-            "temperature": 0.7,
-            "min_length": 5,
+            "temperature": 0.8,
             "top_p": 0.3,
             "do_sample": True,
+            "pad_token_id": self.base_model.config.pad_token_id,
+            # "num_beams": 3,
+            "max_new_tokens": 50,
         }
 
         objective_kl = []  # KL divergence between the new and old policies
@@ -185,7 +188,7 @@ class RLAIF:
         advantages_mean = []  # Mean of the advantages
 
         # PPO training loop
-        for step, batch in tqdm(enumerate(self.ppo_trainer.dataloader)):
+        for step, batch in enumerate(tqdm(self.ppo_trainer.dataloader)):
             if step >= max_ppo_steps:
                 break
 
@@ -193,20 +196,18 @@ class RLAIF:
             prompts = [self.tokenizer.decode(input) for input in batch["input_ids"]]
             prompt_tensors = batch["input_ids"]
 
-
             # Generate summary tensors
             summary_tensors = []
             for prompt_tensor in prompt_tensors:
-                max_new_tokens = output_length_sampler()
-                generation_kwargs["max_new_tokens"] = max_new_tokens
+                # max_new_tokens = output_length_sampler()
+                # generation_kwargs["max_new_tokens"] = max_new_tokens
+                max_new_tokens = generation_kwargs["max_new_tokens"]
                 prompt_tensor = torch.tensor(prompt_tensor).to(self.device)
                 summary = self._ppo_trainer.generate(prompt_tensor, **generation_kwargs)
                 summary_tensors.append(summary.squeeze()[-max_new_tokens:])
 
             # Decode the summary tensors to get the summaries
-            batch["response"] = [
-                self.tokenizer.decode(r.squeeze()) for r in summary_tensors
-            ]
+            batch["response"] = [self.tokenizer.decode(r.squeeze()) for r in summary_tensors]
             response = batch["response"]
 
             # Compute the rewards
@@ -215,10 +216,10 @@ class RLAIF:
                 score = self.score_summaries(prompt, response)  # utilises cohere API
                 reward_tensors.append(torch.tensor(score))
 
-            # Convert the lists to tensors
+            # Convert the prompts to tensors
             prompt_tensors = [torch.tensor(tensor) for tensor in prompt_tensors]
-            summary_tensors = [torch.tensor(tensor) for tensor in summary_tensors]
-            reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
+            # summary_tensors = [torch.tensor(tensor) for tensor in summary_tensors]
+            # reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
 
             # Step the PPO trainer
             stats = self.ppo_trainer.step(
@@ -233,7 +234,7 @@ class RLAIF:
 
         return objective_kl, returns_mean, advantages_mean
 
-    def push_to_hub(self):
+    def push_model_to_hub(self):
         """
         Pushes the model to the Hugging Face Hub for access anywhere.
 
