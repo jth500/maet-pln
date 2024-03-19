@@ -229,7 +229,7 @@ class BartDatasetHandler(DatasetHandler):
             tokenized_full_prompt: The tokenized version of the full prompt.
         """
         full_prompt = self.generate_prompt(
-            data_point["output"]
+            data_point["input"]
         )
         #Setting the output as the label for BART
         tokenized_full_prompt = self.tokenize(full_prompt, text_target= data_point['output'])
