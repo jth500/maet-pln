@@ -56,7 +56,7 @@ class DatasetHandler(ABC):
         assert tk is not None
         self._tokenizer = tk
 
-    def _data_to_json(self):
+    def _data_to_json(self, input_label="prompt", target_label="summary"):
         """
         Converts the dataset to JSON format and saves it to a file named 'data_json'.
 
@@ -69,7 +69,7 @@ class DatasetHandler(ABC):
         Returns:
             None
         """
-        dataset = load_dataset(self.dataset_name, split="train[:1000]")
+        dataset = load_dataset(self.dataset_name, split="train[:10000]")
         dataset_splits = {"train": dataset}
 
         for key, ds in dataset_splits.items():
@@ -77,8 +77,8 @@ class DatasetHandler(ABC):
             with open("data_json", "w") as f:
                 for item in ds:
                     newitem = {
-                        "input": item["prompt"],
-                        "output": item["label"],
+                        "input": item[input_label],
+                        "output": item[target_label],
                     }
                     f.write(json.dumps(newitem) + "\n")
 
@@ -97,7 +97,7 @@ class DatasetHandler(ABC):
         """
         defaults = dict(
             truncation=True,
-            max_length=2048,
+            max_length=1024, # gpt 2 specific; should we keep constant for comparatives?
             padding=False,
             return_tensors=None
             )
@@ -107,7 +107,7 @@ class DatasetHandler(ABC):
 
         return result
 
-    def generate_and_tokenize_prompt(self, data_point):
+    def generate_and_tokenize_prompt(self, data_point, output=True):
         """
         Generates a full prompt using the input and output from the given data point,
         and then tokenizes the full prompt using the provided tokenizer.
@@ -119,15 +119,20 @@ class DatasetHandler(ABC):
         Returns:
             tokenized_full_prompt: The tokenized version of the full prompt.
         """
-        full_prompt = self.generate_prompt(
-            data_point["input"],
-            data_point["output"]
-        )
+        if output == False:
+            full_prompt = self.generate_prompt(
+                data_point["input"],
+            )
+        else:
+            full_prompt = self.generate_prompt(
+                data_point["input"],
+                data_point["output"]
+            )
         tokenized_full_prompt = self.tokenize(full_prompt)
 
         return tokenized_full_prompt
 
-    def process_data(self):
+    def process_data(self, input_label="prompt", target_label="summary"):
         """
         Process the data for training and validation.
 
@@ -135,22 +140,40 @@ class DatasetHandler(ABC):
             train_data (Dataset): Processed training data.
             val_data (Dataset): Processed validation data.
         """
-        self._data_to_json()
+        self._data_to_json(input_label, target_label)
 
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
+        sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
 
-        train_data = (
-            train_val["train"]
-            .shuffle()
+        sft_train_data = (
+            sft_rlaif["test"]
+            .shuffle(seed=42)
             .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        rlaif_train_data = (
+            sft_rlaif["train"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_and_tokenize_prompt(x, output=False))
         )
         val_data = (
             train_val["test"]
-            .shuffle()
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_and_tokenize_prompt(x, output=False))
         )
-        return train_data, val_data
+
+        # only allow inputs with token length less than models max length
+        sft_train_data = sft_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+        rlaif_train_data = rlaif_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
+        )
+        val_data = val_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
+        )
+
+        return sft_train_data, rlaif_train_data, val_data
 
 
 class T5DatasetHandler(DatasetHandler):
@@ -175,7 +198,7 @@ class GPT2DatasetHandler(DatasetHandler):
     def template(self):
         return (
             """You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+            """Your job is to summarise the text in a single sentence and accurately as possible.\n\n"""
             """### Input:\n{input}\n\n### Response:\n{output}"""
         )
     

@@ -36,7 +36,7 @@ class TokenizationHandler(ABC):
             tokenizer: The created tokenizer.
         """
         defaults = dict(
-            model_max_length=512, 
+            model_max_length=1024, 
             truncation=True, 
             padding=True
             )
@@ -48,27 +48,6 @@ class TokenizationHandler(ABC):
         tokenizer = self._create_tokenizer(**kwargs)
         self.tokenizer = tokenizer
         return tokenizer
-
-    def tokenize(self, prompt, **kwargs):
-        """
-        Tokenizes the given prompt using the tokenizer.
-
-        Args:
-            prompt (str): The prompt to be tokenized.
-
-        Returns:
-            dict: A dictionary containing the tokenized prompt and labels.
-        """
-        defaults = {
-            "truncation": True,
-            "max_length": 512,
-            "padding": False,
-            "return_tensors": None,
-        }
-        kwargs = update_kwargs(kwargs, defaults)
-        result = self.tokenizer(prompt, **kwargs)
-        result["labels"] = result["input_ids"].copy()
-        return result
 
 
 class T5TokenizationHandler(TokenizationHandler):
@@ -85,7 +64,7 @@ class GPT2TokenizationHandler(TokenizationHandler):
             eos_token="<|endoftext|>",
             bos_token="<|startoftext|>",
             pad_token="<|pad|>",
-            model_max_length=2096
+            model_max_length=1024
             )
         kwargs = update_kwargs(kwargs, defaults)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, **kwargs)
