@@ -82,8 +82,25 @@ class DatasetHandler(ABC):
                     }
                     f.write(json.dumps(newitem) + "\n")
 
+
+class GPTDatasetHandler(DatasetHandler):
+    # Decoder only architecture
+    def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
+        super().__init__(dataset_name, tokenizer, data_dir)
+
+    @property
+    def template(self):
+        return (
+            """You are an expert in text summarization. You are given the full text."""
+            """Your job is to summarise the text in a single sentence and accurately as possible.\n\n"""
+            """### TEXT:\n{input}\n\n"""
+            """### SUMMARY:\n{output}"""
+        )
+
     def generate_prompt(self, input, output=""):
-        return self.template.format(input=input, output=output)
+        if output:
+            output = output + self.tokenizer.eos_token
+        return self.tokenizer.bos_token + self.template.format(input=input, output=output)
     
     def tokenize(self, prompt, **kwargs):
         """
@@ -99,10 +116,10 @@ class DatasetHandler(ABC):
             truncation=True,
             max_length=1024, # gpt 2 specific; should we keep constant for comparatives?
             padding=False,
-            return_tensors=None
+            return_tensors=None,
             )
         kwargs = update_kwargs(kwargs, defaults)
-        result = self.tokenizer(prompt, **kwargs)
+        result = self.tokenizer(prompt, add_special_tokens=False, **kwargs)
         result["labels"] = result["input_ids"].copy()
 
         return result
@@ -173,57 +190,230 @@ class DatasetHandler(ABC):
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
         )
 
-        return sft_train_data, rlaif_train_data, val_data
+        columns = ['input', 'output', 'input_ids', 'attention_mask', 'labels']
+        sft_train_data.set_format(type='torch', columns=columns)
+        rlaif_train_data.set_format(type='torch', columns=columns)
+        val_data.set_format(type='torch', columns=columns)
 
+        return sft_train_data, rlaif_train_data, val_data
+    
 
 class T5DatasetHandler(DatasetHandler):
+    # Encoder-decoder architecture
     def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
         super().__init__(dataset_name, tokenizer, data_dir)
 
     @property
     def template(self):
         return (
-            """You are an expert in text summarization. You are given the full text."""
+            """<s>You are an expert in text summarization. You are given the full text."""
             """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
-            """### Input:\n{input}\n\n### Response:\n{output}"""
-        )
-
-
-class GPT2DatasetHandler(DatasetHandler):
-    def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
-        super().__init__(dataset_name, tokenizer, data_dir)
-        pass
-
-    @property
-    def template(self):
-        return (
-            """You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text in a single sentence and accurately as possible.\n\n"""
-            """### Input:\n{input}\n\n### Response:\n{output}"""
+            """### TEXT:\n{input}\n\n"""
+            """### SUMMARY:</s>"""
         )
     
-    def generate_prompt(self, input, output=""):
-        if output:
-            output = output + self.tokenizer.eos_token
-        return self.tokenizer.bos_token + self.template.format(input=input, output=output)
+    def generate_prompt(self, data_point):
+        data_point['input'] = self.template.format(input=data_point['input'])
+        data_point['output'] = "<s>{output}</s>".format(output=data_point['output'])
+        return data_point
+    
+    def generate_and_tokenize_prompt(self, data_point):
+        """
+        Generates a full prompt using the input and output from the given data point,
+        and then tokenizes the full prompt using the provided tokenizer.
+
+        Args:
+            data_point (dict): A dictionary containing the input and output data.
+            tokenizer: The tokenizer object used for tokenization.
+
+        Returns:
+            tokenized_full_prompt: The tokenized version of the full prompt.
+        """
+        defaults = dict(
+            truncation=True,
+            padding=False,
+            return_tensors=None,
+            )
+        input_tokens = self.tokenizer(data_point["input"], add_special_tokens=False, max_length=1024, **defaults)
+        target_tokens = self.tokenizer(data_point["output"], add_special_tokens=False, max_length=50, **defaults)
+
+        tokenized_full_prompt = {
+            'input_ids': input_tokens['input_ids'], 
+            'attention_mask': input_tokens['attention_mask'],
+            'decoder_input_ids': target_tokens['input_ids'],
+            'decoder_attention_mask': target_tokens['attention_mask'],
+            'labels': target_tokens['input_ids']
+        }
+        return tokenized_full_prompt
+    
+    def process_data(self, input_label="prompt", target_label="summary"):
+        """
+        Process the data for training and validation.
+
+        Returns:
+            train_data (Dataset): Processed training data.
+            val_data (Dataset): Processed validation data.
+        """
+        self._data_to_json(input_label, target_label)
+
+        data = load_dataset("json", data_files="data_json")
+        train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
+        sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+
+        sft_train_data = (
+            sft_rlaif["test"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        rlaif_train_data = (
+            sft_rlaif["train"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        val_data = (
+            train_val["test"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x), batched=True)
+        )
+
+        # only allow inputs with token length less than models max length
+        sft_train_data = sft_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+        rlaif_train_data = rlaif_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+        val_data = val_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+
+        columns = ['input', 'output', 'input_ids', 'decoder_input_ids', 'attention_mask', 'decoder_attention_mask', 'labels']
+        sft_train_data.set_format(type='torch', columns=columns)
+        rlaif_train_data.set_format(type='torch', columns=columns)
+        val_data.set_format(type='torch', columns=columns)
+
+        return sft_train_data, rlaif_train_data, val_data
+    
+
+class BARTDatasetHandler(DatasetHandler):
+    # Denoising autoencoder architecture
+    def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
+        super().__init__(dataset_name, tokenizer, data_dir)
+
+    @property
+    def template(self):
+        return (
+            """<s>You are an expert in text summarization. You are given the full text."""
+            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+            """### TEXT:\n{input}\n\n"""
+            """### SUMMARY:</s>"""
+        )
+    
+    def generate_prompt(self, data_point):
+        data_point['input'] = self.template.format(input=data_point['input'])
+        data_point['output'] = "<s>{output}</s>".format(output=data_point['output'])
+        return data_point
+    
+    def generate_and_tokenize_prompt(self, data_point):
+        """
+        Generates a full prompt using the input and output from the given data point,
+        and then tokenizes the full prompt using the provided tokenizer.
+
+        Args:
+            data_point (dict): A dictionary containing the input and output data.
+            tokenizer: The tokenizer object used for tokenization.
+
+        Returns:
+            tokenized_full_prompt: The tokenized version of the full prompt.
+        """
+        defaults = dict(
+            truncation=True,
+            padding=False,
+            return_tensors=None,
+            )
+        input_tokens = self.tokenizer(data_point["input"], add_special_tokens=False, max_length=1024, **defaults)
+        target_tokens = self.tokenizer(data_point["output"], add_special_tokens=False, max_length=50, **defaults)
+
+        tokenized_full_prompt = {
+            'input_ids': input_tokens['input_ids'], 
+            'attention_mask': input_tokens['attention_mask'],
+            'labels': target_tokens['input_ids']
+        }
+        return tokenized_full_prompt
+    
+    def process_data(self, input_label="prompt", target_label="summary"):
+        """
+        Process the data for training and validation.
+
+        Returns:
+            train_data (Dataset): Processed training data.
+            val_data (Dataset): Processed validation data.
+        """
+        self._data_to_json(input_label, target_label)
+
+        data = load_dataset("json", data_files="data_json")
+        train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
+        sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+
+        sft_train_data = (
+            sft_rlaif["test"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        rlaif_train_data = (
+            sft_rlaif["train"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+        val_data = (
+            train_val["test"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x), batched=True)
+        )
+
+        # only allow inputs with token length less than models max length
+        sft_train_data = sft_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+        rlaif_train_data = rlaif_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+        val_data = val_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+
+        columns = ['input', 'output', 'input_ids', 'attention_mask', 'labels']
+        sft_train_data.set_format(type='torch', columns=columns)
+        rlaif_train_data.set_format(type='torch', columns=columns)
+        val_data.set_format(type='torch', columns=columns)
+
+        return sft_train_data, rlaif_train_data, val_data
     
 
 if __name__ == "__main__":
-    import sys
-    import os
-    from pathlib import Path
+    # test 
+    from huggingface_hub import login
 
-    CWD = Path(os.path.dirname(os.path.realpath(__file__)))
-    SRC = CWD.parent / "src"
-    sys.path.append(str(CWD))
+    login("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")
+
+    # CWD = Path(os.path.dirname(os.path.realpath(__file__)))
+    # SRC = CWD.parent / "src"
+    # sys.path.append(str(CWD))
 
     from tokenization import T5TokenizationHandler
+    from model_builder import T5ModelBuilder
+    from data_handler import T5DatasetHandler
 
-    tokenizer = T5TokenizationHandler(model_id="t5-small").create_tokenizer()
-    DATASET_NAME = "CarperAI/openai_summarize_tldr"
-    data_handler = T5DatasetHandler(DATASET_NAME, tokenizer)
-    prompt = "Hello there"
-    tokenized_prompt = data_handler.generate_and_tokenize_prompt(
-        {"input": prompt, "output": prompt}
-    )
-    pass
+    model_id = "t5-base"
+    tokenizer = T5TokenizationHandler().create_tokenizer()
+    model = T5ModelBuilder(model_id, tokenizer).base_model
+
+    dataset_name = "EdinburghNLP/xsum"
+    data_handler = T5DatasetHandler(dataset_name, tokenizer)
+    sft_train_data, rlaif_train_data, val_data = data_handler.process_data(input_label="document", target_label="summary")
