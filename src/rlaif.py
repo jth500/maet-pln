@@ -1,10 +1,12 @@
 from tqdm import tqdm
 import torch
+from abc import ABC
 
 from trl import (
     PPOTrainer,
     PPOConfig,
     AutoModelForCausalLMWithValueHead,
+    AutoModelForSeq2SeqLMWithValueHead,
     create_reference_model,
 )
 from trl.core import LengthSampler
@@ -12,7 +14,7 @@ from trl.core import LengthSampler
 from utils import update_kwargs
 
 
-class RLAIF:
+class RLAIF(ABC):
 
     def __init__(self, base_dir, tokenizer, save_dir, train_dataset):
         self.base_dir = base_dir  # The base model is the SFT model
@@ -36,15 +38,14 @@ class RLAIF:
         self._base_model = base
 
     def load_base_model(self):
-        """
-        Loads the base model. Different from create_base_model in SFT class since need Value Head.
-
-        Returns:
-            The base model.
-        """
-        base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
-            self.base_dir
-        )
+        if "gpt2" in self.base_dir:
+            base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
+                self.base_dir
+            )
+        else:
+            base_model = AutoModelForSeq2SeqLMWithValueHead.from_pretrained(
+                self.base_dir
+            )
         return base_model
 
     @property
@@ -141,6 +142,8 @@ class RLAIF:
                 {format}
 
                 Your role is to rate the provided summarization with scores ranging from 0 to 1, where: 0 is the lowest score, 1 is the highest score.
+                The summary should be a single sentence, accurate, and capture the main points of the full text.
+                Penalize summaries that are too long or contain irrelevant information.
                 Your response should only be a double precision number that represents the scoring rate.
                 """,
                     max_tokens=5,

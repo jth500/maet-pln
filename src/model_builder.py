@@ -1,4 +1,4 @@
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, BartForConditionalGeneration
 
 import logging
 import json
@@ -51,16 +51,6 @@ class ModelBuilder(ABC):
     def base_model(self, bm):
         self._base_model = bm
 
-    # @property
-    # def tokenizer(self):
-    #     if self._tokenizer is None:
-    #         raise ValueError("Tokenizer has not been created")
-    #     return self._tokenizer
-
-    # @tokenizer.setter
-    # def tokenizer(self, tk):
-    #     self._tokenizer = tk
-
     def create_base_model(self, **kwargs):
         """
         Creates and returns the base model.
@@ -96,9 +86,13 @@ class ModelBuilder(ABC):
 
 
 class T5ModelBuilder(ModelBuilder):
-    def __init__(self, model_id="t5-base"):
-        assert "t5" in model_id
-        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM)
+    def __init__(self, model_id, tokenizer):
+        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM, tokenizer=tokenizer)
+
+
+class BARTModelBuilder(ModelBuilder):
+    def __init__(self, model_id, tokenizer):
+        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM, tokenizer=tokenizer)
 
 
 class GPT2ModelBuilder(ModelBuilder):
