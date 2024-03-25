@@ -2,6 +2,12 @@ from tqdm import tqdm
 import torch
 from abc import ABC
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+cohere_api_key = os.getenv("COHERE_API_KEY")
+
 from trl import (
     PPOTrainer,
     PPOConfig,
@@ -14,7 +20,7 @@ from trl.core import LengthSampler
 from utils import update_kwargs
 
 
-class RLAIF(ABC):
+class RLAIF:
 
     def __init__(self, base_dir, tokenizer, save_dir, train_dataset):
         self.base_dir = base_dir  # The base model is the SFT model
@@ -125,7 +131,7 @@ class RLAIF(ABC):
         import re
         import cohere
 
-        co = cohere.Client("ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz")
+        co = cohere.Client(cohere_api_key)
 
         score = 0
 
@@ -182,7 +188,7 @@ class RLAIF(ABC):
             "top_p": 0.3,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
-            # "num_beams": 3,
+            "num_beams": 3,
             "max_new_tokens": 50,
         }
 
