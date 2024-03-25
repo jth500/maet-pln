@@ -205,12 +205,8 @@ class T5DatasetHandler(DatasetHandler):
 
     @property
     def template(self):
-        return (
-            """<s>You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
-            """### TEXT:\n{input}\n\n"""
-            """### SUMMARY:</s>"""
-        )
+        return """summarize: {input}"""
+
     
     def generate_prompt(self, data_point):
         data_point['input'] = self.template.format(input=data_point['input'])
