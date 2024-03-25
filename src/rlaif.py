@@ -2,6 +2,12 @@ from tqdm import tqdm
 import torch
 from abc import ABC
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+cohere_api_key = os.getenv("COHERE_API_KEY")
+
 from trl import (
     PPOTrainer,
     PPOConfig,
@@ -125,7 +131,7 @@ class RLAIF:
         import re
         import cohere
 
-        co = cohere.Client("ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz")
+        co = cohere.Client(cohere_api_key)
 
         score = 0
 
