@@ -83,7 +83,7 @@ class DatasetHandler(ABC):
                     f.write(json.dumps(newitem) + "\n")
 
 
-class GPTDatasetHandler(DatasetHandler):
+class GPT2DatasetHandler(DatasetHandler):
     # Decoder only architecture
     def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
         super().__init__(dataset_name, tokenizer, data_dir)
