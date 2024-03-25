@@ -182,7 +182,7 @@ class RLAIF(ABC):
             "top_p": 0.3,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
-            # "num_beams": 3,
+            "num_beams": 3,
             "max_new_tokens": 50,
         }
 

@@ -92,7 +92,7 @@ class GPT2DatasetHandler(DatasetHandler):
     def template(self):
         return (
             """You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text in a single sentence and accurately as possible.\n\n"""
+            """Your job is to summarise the text in a single sentence and accurately as possible in a single sentence.\n\n"""
             """### TEXT:\n{input}\n\n"""
             """### SUMMARY:\n{output}"""
         )
@@ -149,7 +149,7 @@ class GPT2DatasetHandler(DatasetHandler):
 
         return tokenized_full_prompt
 
-    def process_data(self, input_label="prompt", target_label="summary"):
+    def process_data(self, input_label="prompt", target_label="summary", rlaif=False):
         """
         Process the data for training and validation.
 
@@ -161,18 +161,28 @@ class GPT2DatasetHandler(DatasetHandler):
 
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
-        sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
 
-        sft_train_data = (
-            sft_rlaif["test"]
-            .shuffle(seed=42)
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
-        rlaif_train_data = (
-            sft_rlaif["train"]
-            .shuffle(seed=42)
-            .map(lambda x: self.generate_and_tokenize_prompt(x, output=False))
-        )
+        if rlaif:
+            sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+            sft_train_data = (
+                sft_rlaif["test"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = (
+                sft_rlaif["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_and_tokenize_prompt(x, output=False))
+            )
+
+        else:
+            sft_train_data = (
+                train_val["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = None
+
         val_data = (
             train_val["test"]
             .shuffle(seed=42)
@@ -183,16 +193,18 @@ class GPT2DatasetHandler(DatasetHandler):
         sft_train_data = sft_train_data.filter(
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
         )
-        rlaif_train_data = rlaif_train_data.filter(
-            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
-        )
+        if rlaif_train_data:
+            rlaif_train_data = rlaif_train_data.filter(
+                lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+            )
         val_data = val_data.filter(
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
         )
 
         columns = ['input', 'output', 'input_ids', 'attention_mask', 'labels']
         sft_train_data.set_format(type='torch', columns=columns)
-        rlaif_train_data.set_format(type='torch', columns=columns)
+        if rlaif_train_data:
+            rlaif_train_data.set_format(type='torch', columns=columns)
         val_data.set_format(type='torch', columns=columns)
 
         return sft_train_data, rlaif_train_data, val_data
@@ -207,7 +219,7 @@ class T5DatasetHandler(DatasetHandler):
     def template(self):
         return (
             """<s>You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+            """Your job is to summarise the text as concisely and accurately as possible in a single sentence.\n\n"""
             """### TEXT:\n{input}\n\n"""
             """### SUMMARY:</s>"""
         )
@@ -246,7 +258,7 @@ class T5DatasetHandler(DatasetHandler):
         }
         return tokenized_full_prompt
     
-    def process_data(self, input_label="prompt", target_label="summary"):
+    def process_data(self, input_label="prompt", target_label="summary", rlaif=False):
         """
         Process the data for training and validation.
 
@@ -258,41 +270,54 @@ class T5DatasetHandler(DatasetHandler):
 
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
-        sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+        
+        if rlaif:
+            sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+            sft_train_data = (
+                sft_rlaif["test"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = (
+                sft_rlaif["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
 
-        sft_train_data = (
-            sft_rlaif["test"]
-            .shuffle(seed=42)
-            .map(lambda x: self.generate_prompt(x))
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
-        rlaif_train_data = (
-            sft_rlaif["train"]
-            .shuffle(seed=42)
-            .map(lambda x: self.generate_prompt(x))
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
+        else:
+            sft_train_data = (
+                train_val["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = None
+
         val_data = (
             train_val["test"]
             .shuffle(seed=42)
             .map(lambda x: self.generate_prompt(x))
-            .map(lambda x: self.generate_and_tokenize_prompt(x), batched=True)
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
         )
 
         # only allow inputs with token length less than models max length
         sft_train_data = sft_train_data.filter(
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
         )
-        rlaif_train_data = rlaif_train_data.filter(
-            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
-        )
+        if rlaif_train_data:
+            rlaif_train_data = rlaif_train_data.filter(
+                lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+            )
         val_data = val_data.filter(
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
         )
 
         columns = ['input', 'output', 'input_ids', 'decoder_input_ids', 'attention_mask', 'decoder_attention_mask', 'labels']
         sft_train_data.set_format(type='torch', columns=columns)
-        rlaif_train_data.set_format(type='torch', columns=columns)
+        if rlaif_train_data:
+            rlaif_train_data.set_format(type='torch', columns=columns)
         val_data.set_format(type='torch', columns=columns)
 
         return sft_train_data, rlaif_train_data, val_data
@@ -307,7 +332,7 @@ class BARTDatasetHandler(DatasetHandler):
     def template(self):
         return (
             """<s>You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text as concisely and accurately as possible.\n\n"""
+            """Your job is to summarise the text as concisely and accurately as possible in a single sentence.\n\n"""
             """### TEXT:\n{input}\n\n"""
             """### SUMMARY:</s>"""
         )
@@ -344,7 +369,7 @@ class BARTDatasetHandler(DatasetHandler):
         }
         return tokenized_full_prompt
     
-    def process_data(self, input_label="prompt", target_label="summary"):
+    def process_data(self, input_label="prompt", target_label="summary", rlaif=False):
         """
         Process the data for training and validation.
 
@@ -356,20 +381,31 @@ class BARTDatasetHandler(DatasetHandler):
 
         data = load_dataset("json", data_files="data_json")
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
-        sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
 
-        sft_train_data = (
-            sft_rlaif["test"]
-            .shuffle(seed=42)
-            .map(lambda x: self.generate_prompt(x))
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
-        rlaif_train_data = (
-            sft_rlaif["train"]
-            .shuffle(seed=42)
-            .map(lambda x: self.generate_prompt(x))
-            .map(lambda x: self.generate_and_tokenize_prompt(x))
-        )
+        if rlaif:
+            sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+            sft_train_data = (
+                sft_rlaif["test"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = (
+                sft_rlaif["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+
+        else:
+            sft_train_data = (
+                train_val["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = None
+
         val_data = (
             train_val["test"]
             .shuffle(seed=42)
@@ -381,39 +417,21 @@ class BARTDatasetHandler(DatasetHandler):
         sft_train_data = sft_train_data.filter(
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
         )
-        rlaif_train_data = rlaif_train_data.filter(
-            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
-        )
+        if rlaif_train_data:
+            rlaif_train_data = rlaif_train_data.filter(
+                lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+            )
         val_data = val_data.filter(
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
         )
 
         columns = ['input', 'output', 'input_ids', 'attention_mask', 'labels']
         sft_train_data.set_format(type='torch', columns=columns)
-        rlaif_train_data.set_format(type='torch', columns=columns)
+        if rlaif_train_data:
+            rlaif_train_data.set_format(type='torch', columns=columns)
         val_data.set_format(type='torch', columns=columns)
 
         return sft_train_data, rlaif_train_data, val_data
     
 
-if __name__ == "__main__":
-    # test 
-    from huggingface_hub import login
-
-    login("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")
-
-    # CWD = Path(os.path.dirname(os.path.realpath(__file__)))
-    # SRC = CWD.parent / "src"
-    # sys.path.append(str(CWD))
-
-    from tokenization import T5TokenizationHandler
-    from model_builder import T5ModelBuilder
-    from data_handler import T5DatasetHandler
-
-    model_id = "t5-base"
-    tokenizer = T5TokenizationHandler().create_tokenizer()
-    model = T5ModelBuilder(model_id, tokenizer).base_model
-
-    dataset_name = "EdinburghNLP/xsum"
-    data_handler = T5DatasetHandler(dataset_name, tokenizer)
-    sft_train_data, rlaif_train_data, val_data = data_handler.process_data(input_label="document", target_label="summary")
+# if __name__ == "__main__":
