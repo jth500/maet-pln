@@ -14,7 +14,7 @@ from trl.core import LengthSampler
 from utils import update_kwargs
 
 
-class RLAIF(ABC):
+class RLAIF:
 
     def __init__(self, base_dir, tokenizer, save_dir, train_dataset):
         self.base_dir = base_dir  # The base model is the SFT model
