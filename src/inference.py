@@ -22,18 +22,19 @@ class Inference():
 
         for i in tqdm(range(sample_size)):
             input_ids = self.val_data["input_ids"][i].unsqueeze(0).to(self.device)
-            # attention_mask = self.val_data[i]["attention_mask"][i]
+            attention_mask = self.val_data["attention_mask"][i].unsqueeze(0).to(self.device)
             generation_config = GenerationConfig(
                 do_sample=True,
-                temperature=0.8,
-                top_p=0.3,
-                num_beams=1,
+                temperature=0.8, # too high, possibly stray too far from the training data
+                top_p=0.3, # chooses from the smallest possible set of words whose cumulative probability exceeds 0.3
+                num_beams=3,
                 max_new_tokens=50,
+                min_new_tokens=10
             )
             with torch.no_grad():
                 generation_output = self.model.generate(
                     input_ids=input_ids,
-                    # attention_mask=attention_mask,
+                    attention_mask=attention_mask,
                     pad_token_id=self.model.config.pad_token_id,
                     generation_config=generation_config,
                     return_dict_in_generate=True,

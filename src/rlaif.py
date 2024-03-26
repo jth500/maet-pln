@@ -148,12 +148,13 @@ class RLAIF:
                 {format}
 
                 Your role is to rate the provided summarization with scores ranging from 0 to 1, where: 0 is the lowest score, 1 is the highest score.
+                0 represents a summary that is completely irrelevant, factually incorrect, or incoherent. 
+                1 represents a perfect summary that is highly relevant, factually correct, and coherent.
                 The summary should be a single sentence, accurate, and capture the main points of the full text.
-                Penalize summaries that are too long or contain irrelevant information.
                 Your response should only be a double precision number that represents the scoring rate.
                 """,
                     max_tokens=5,
-                    temperature=0.1,
+                    temperature=0.2,
                 )
                 .generations[0]
                 .text
@@ -184,11 +185,11 @@ class RLAIF:
 
         # Generation kwargs
         generation_kwargs = {
-            "temperature": 0.8,
+            "temperature": 0.3,
             "top_p": 0.3,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
-            "num_beams": 3,
+            # "num_beams": 3, # next token distribution can be too steep for beam search logic even with high temperature
             "max_new_tokens": 50,
         }
 
