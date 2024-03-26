@@ -185,7 +185,7 @@ class RLAIF:
 
         # Generation kwargs
         generation_kwargs = {
-            "temperature": 0.3,
+            "temperature": 0.8, # lower results in nan probabilities
             "top_p": 0.3,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
