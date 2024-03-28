@@ -3,10 +3,11 @@ import torch
 from abc import ABC
 
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv()
-cohere_api_key = os.getenv("COHERE_API_KEY")
+# load_dotenv()
+# cohere_api_key = os.getenv("COHERE_API_KEY")
+cohere_api_key = "ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz"
 
 from trl import (
     PPOTrainer,
@@ -238,7 +239,7 @@ class RLAIF:
                     summary_text = summary_text.split("### TL;DR:")[1].strip()
                 # print(summary_text)
                 summary = self.tokenizer.encode(summary_text)
-                summary_tensor = torch.tensor(summary).to(self.device)
+                summary_tensor = torch.tensor(summary)
                 summary_tensors.append(summary_tensor.squeeze()[-max_new_tokens:]) # truncate to max_new_tokens if necessary
 
             # Decode the summary tensors to get the summaries
@@ -255,9 +256,9 @@ class RLAIF:
             # reward_tensors = (reward_tensors - reward_tensors.mean()) / (reward_tensors.std())
 
             # Convert the prompts to tensors
-            prompt_tensors = [torch.tensor(tensor) for tensor in prompt_tensors]
-            # summary_tensors = [torch.tensor(tensor) for tensor in summary_tensors]
-            # reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
+            prompt_tensors = [torch.tensor(tensor).long() for tensor in prompt_tensors]
+            summary_tensors = [torch.tensor(tensor).long() for tensor in summary_tensors]
+            reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
 
             # Step the PPO trainer
             stats = self.ppo_trainer.step(
@@ -270,11 +271,6 @@ class RLAIF:
             returns_mean.append(stats["ppo/returns/mean"])
             kl.append(stats["objective/kl"])
             loss.append(stats["ppo/loss/value"])
-
-            if (step + 1) % 10 == 0:
-                step_10_loss = stats["ppo/loss/value"]
-                print(f"Step {step}: {step_10_loss}")
-
 
         return ref_ppo_delta, returns_mean, kl, loss
 
