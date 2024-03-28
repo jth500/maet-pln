@@ -7,11 +7,12 @@ from utils import update_kwargs
 
 class SFT:
 
-    def __init__(self, base_model, tokenizer, save_dir, train_dataset, train_epochs=4):
+    def __init__(self, base_model, tokenizer, save_dir, train_dataset, train_epochs=4, eval_dataset=None):
         self._save_dir = save_dir
         self.tokenizer = tokenizer
         self.base_model = base_model
         self.train_dataset = train_dataset
+        self.eval_dataset = eval_dataset
         self.trainer = None
         self.training_config = None
         self.train_epochs = train_epochs
@@ -31,22 +32,22 @@ class SFT:
             output_dir = "/tmp",
             push_to_hub = True,
             push_to_hub_model_id = self._save_dir,
-            warmup_steps = 0.1,
+            # warmup_steps = 0.1,
             num_train_epochs=self.train_epochs,
-            # max_steps = 200,
             per_device_train_batch_size = 1,
-            # per_device_eval_batch_size = 1,
-            gradient_accumulation_steps = 8,
+            # per_device_eval_batch_size = 4,
+            gradient_accumulation_steps = 2,
             learning_rate = 2e-5,
-            logging_steps = 0.25,
+            logging_steps = 0.2,
+            weight_decay = 0.01,
             evaluation_strategy = "no",
             save_strategy = "no",
             # eval_steps=0.25,
             # save_steps=0.25,
             optim = 'adamw_torch',
-            load_best_model_at_end = False,
             group_by_length = True,
-            # seed = 42
+            fp16 = True,
+            seed = 42,
         )
         kwargs = update_kwargs(kwargs, defaults)
         training_config = TrainingArguments(**kwargs)
@@ -65,7 +66,8 @@ class SFT:
         trainer = Trainer(
             model=self.base_model,
             args=self.training_config,
-            train_dataset=self.train_dataset,  # Set your actual train_dataset here
+            train_dataset=self.train_dataset,
+            eval_dataset=self.eval_dataset,
             data_collator=DataCollatorForSeq2Seq(
                 self.tokenizer,
             )

@@ -22,7 +22,7 @@ from utils import update_kwargs
 
 class RLAIF:
 
-    def __init__(self, base_dir, tokenizer, save_dir, train_dataset):
+    def __init__(self, base_dir, tokenizer, save_dir, train_dataset, ppo_epochs=4):
         self.base_dir = base_dir  # The base model is the SFT model
         self.save_dir = save_dir
         self.tokenizer = tokenizer
@@ -31,6 +31,7 @@ class RLAIF:
         self.ppo_config = None
         self.ppo_trainer = None
         self.train_dataset = train_dataset
+        self.ppo_epochs = ppo_epochs
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     @property
@@ -70,13 +71,22 @@ class RLAIF:
     @property
     def ppo_config(self, **kwargs):
         if self._ppo_config is None:
-            defaults = {
-                "model_name": self.base_dir,
-                "learning_rate": 1e-5,
-                "ppo_epochs": 1,
-                "mini_batch_size": 1,
-                "batch_size": 2,
-            }
+            defaults = dict(
+                model_name = self.base_dir,
+                learning_rate = 1e-5,
+                ppo_epochs = self.ppo_epochs,
+                batch_size = 1,
+                mini_batch_size = 1,
+                optimize_device_cache = True,
+                use_score_scaling = True,
+                use_score_norm = True,
+                adap_kl_ctrl = True,
+                init_kl_coef = 0.1,
+                kl_penalty = "kl",
+                target = 0.1, # low to keep the policy close to the old policy
+                cliprange = 0.2,
+                seed = 42,
+            )
             kwargs = update_kwargs(kwargs, defaults)
             self._ppo_config = PPOConfig(**kwargs)
         return self._ppo_config
@@ -151,7 +161,13 @@ class RLAIF:
                 0 represents a summary that is completely irrelevant, factually incorrect, or incoherent. 
                 1 represents a perfect summary that is highly relevant, factually correct, and coherent.
                 The summary should be a single sentence, accurate, and capture the main points of the full text.
-                Your response should only be a double precision number that represents the scoring rate.
+
+                Use the following chain-of-thought reasoning to evaluate the summary:
+                1. Does the summary accurately represent the full text?
+                2. Is the summary factually correct?
+                3. Is the summary coherent and easy to understand? 
+
+                Your response should only be a double precision number that represents the score.
                 """,
                     max_tokens=5,
                     temperature=0.2,
@@ -185,17 +201,19 @@ class RLAIF:
 
         # Generation kwargs
         generation_kwargs = {
-            "temperature": 0.8, # lower results in nan probabilities
-            "top_p": 0.3,
+            "temperature": 0.3, # lower results in nan probabilities
+            "top_p": 1.0,
+            "top_k": 0.0,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
-            # "num_beams": 3, # next token distribution can be too steep for beam search logic even with high temperature
-            "max_new_tokens": 50,
+            "num_beams": 4, # next token distribution can be too steep for beam search logic even with high temperature
+            "max_new_tokens": 150,
         }
 
-        objective_kl = []  # KL divergence between the new and old policies
-        returns_mean = []  # Mean of the returns
-        advantages_mean = []  # Mean of the advantages
+        ref_ppo_delta = []
+        returns_mean = []
+        kl = [] 
+        loss = []
 
         # PPO training loop
         for step, batch in enumerate(tqdm(self.ppo_trainer.dataloader)):
@@ -213,8 +231,15 @@ class RLAIF:
                 # generation_kwargs["max_new_tokens"] = max_new_tokens
                 max_new_tokens = generation_kwargs["max_new_tokens"]
                 prompt_tensor = torch.tensor(prompt_tensor).to(self.device)
-                summary = self._ppo_trainer.generate(prompt_tensor, **generation_kwargs)
-                summary_tensors.append(summary.squeeze()[-max_new_tokens:])
+                generation_output = self._ppo_trainer.generate(prompt_tensor, **generation_kwargs)
+                output = generation_output[0]
+                summary_text = self.tokenizer.decode(output, skip_special_tokens=True) 
+                if "### TL;DR:" in summary_text:
+                    summary_text = summary_text.split("### TL;DR:")[1].strip()
+                # print(summary_text)
+                summary = self.tokenizer.encode(summary_text)
+                summary_tensor = torch.tensor(summary).to(self.device)
+                summary_tensors.append(summary_tensor.squeeze()[-max_new_tokens:]) # truncate to max_new_tokens if necessary
 
             # Decode the summary tensors to get the summaries
             batch["response"] = [self.tokenizer.decode(r.squeeze()) for r in summary_tensors]
@@ -225,6 +250,9 @@ class RLAIF:
             for prompt, summary in zip(prompts, response):
                 score = self.score_summaries(prompt, response)  # utilises cohere API
                 reward_tensors.append(torch.tensor(score))
+
+            # normalise the rewards; this is important for the PPO algorithm
+            # reward_tensors = (reward_tensors - reward_tensors.mean()) / (reward_tensors.std())
 
             # Convert the prompts to tensors
             prompt_tensors = [torch.tensor(tensor) for tensor in prompt_tensors]
@@ -238,11 +266,17 @@ class RLAIF:
             self.ppo_trainer.log_stats(stats, batch, reward_tensors)
 
             # Log the stats
-            objective_kl.append(stats["objective/kl"])
+            ref_ppo_delta.append(stats["ppo/mean_non_score_reward"])
             returns_mean.append(stats["ppo/returns/mean"])
-            advantages_mean.append(stats["ppo/policy/advantages_mean"])
+            kl.append(stats["objective/kl"])
+            loss.append(stats["ppo/loss/value"])
 
-        return objective_kl, returns_mean, advantages_mean
+            if (step + 1) % 10 == 0:
+                step_10_loss = stats["ppo/loss/value"]
+                print(f"Step {step}: {step_10_loss}")
+
+
+        return ref_ppo_delta, returns_mean, kl, loss
 
     def push_model_to_hub(self):
         """

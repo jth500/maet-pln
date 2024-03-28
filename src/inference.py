@@ -25,10 +25,10 @@ class Inference():
             attention_mask = self.val_data["attention_mask"][i].unsqueeze(0).to(self.device)
             generation_config = GenerationConfig(
                 do_sample=True,
-                temperature=0.8, # too high, possibly stray too far from the training data
-                top_p=0.3, # chooses from the smallest possible set of words whose cumulative probability exceeds 0.3
+                temperature=1.0, # too high, possibly stray too far from the training data
+                top_p=0.7, # chooses from the smallest possible set of words whose cumulative probability exceeds 0.3
                 num_beams=3,
-                max_new_tokens=50,
+                max_new_tokens=150,
                 min_new_tokens=10
             )
             with torch.no_grad():
@@ -42,8 +42,8 @@ class Inference():
                 )
             s = generation_output.sequences[0]
             output = self.tokenizer.decode(s, skip_special_tokens=True)
-            if "### SUMMARY:" in output:
-                response_text = output.split("### SUMMARY:")[1].strip()
+            if "### TL;DR:" in output:
+                response_text = output.split("### TL;DR:")[1].strip()
             else:
                 response_text = output
 
