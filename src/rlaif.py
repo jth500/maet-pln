@@ -9,6 +9,7 @@ import os
 # cohere_api_key = os.getenv("COHERE_API_KEY")
 cohere_api_key = "ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz"
 
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from trl import (
     PPOTrainer,
     PPOConfig,
@@ -16,7 +17,8 @@ from trl import (
     AutoModelForSeq2SeqLMWithValueHead,
     create_reference_model,
 )
-from trl.core import LengthSampler
+from peft import LoraConfig
+from torch.optim import Adam
 
 from utils import update_kwargs
 
@@ -46,13 +48,23 @@ class RLAIF:
         self._base_model = base
 
     def load_base_model(self):
+        lora_config = LoraConfig(
+            r=8,
+            lora_alpha=16,
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM"
+        )
         if "gpt2" in self.base_dir:
             base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
-                self.base_dir
+                self.base_dir,
+                peft_config=lora_config,
+                device_map="auto"
             )
         else:
             base_model = AutoModelForSeq2SeqLMWithValueHead.from_pretrained(
-                self.base_dir
+                self.base_dir,
+                peft_config=lora_config
             )
         return base_model
 
@@ -74,18 +86,10 @@ class RLAIF:
         if self._ppo_config is None:
             defaults = dict(
                 model_name = self.base_dir,
-                learning_rate = 1e-5,
+                learning_rate = 2e-5,
                 ppo_epochs = self.ppo_epochs,
                 batch_size = 1,
                 mini_batch_size = 1,
-                optimize_device_cache = True,
-                use_score_scaling = True,
-                use_score_norm = True,
-                adap_kl_ctrl = True,
-                init_kl_coef = 0.1,
-                kl_penalty = "kl",
-                target = 0.1, # low to keep the policy close to the old policy
-                cliprange = 0.2,
                 seed = 42,
             )
             kwargs = update_kwargs(kwargs, defaults)
@@ -116,6 +120,7 @@ class RLAIF:
         Returns:
             PPOTrainer: The created PPO trainer.
         """
+        optimizer=Adam(filter(lambda p: p.requires_grad, self.base_model.parameters()), lr=2e-5)
         self._ppo_trainer = PPOTrainer(
             config=self.ppo_config,
             model=self.base_model,
@@ -123,6 +128,7 @@ class RLAIF:
             tokenizer=self.tokenizer,
             dataset=self.train_dataset,
             data_collator=self._collator,
+            optimizer=optimizer,
         )
         return self._ppo_trainer
 
@@ -154,22 +160,26 @@ class RLAIF:
                 co.generate(
                     model="command-nightly",
                     # Can this prompt be tailored to cohere's command-nightly model?
-                    prompt=f"""You are an expert in text summarization. Below, you are given the full text and its summarization.
+                    prompt=f"""You are an expert in text summarization.
 
-                {format}
+Your role is to rate the provided summarization with scores ranging from 0.01 to 0.99, where: 0.01 is the lowest score, 0.99 is the highest score.
+0.01 represents a summary that is completely irrelevant, factually incorrect, or incoherent. 
+0.99 represents a perfect summary that is highly relevant, factually correct, and coherent.
+The summary should be a single sentence, accurate, and capture the main points of the full text.
 
-                Your role is to rate the provided summarization with scores ranging from 0 to 1, where: 0 is the lowest score, 1 is the highest score.
-                0 represents a summary that is completely irrelevant, factually incorrect, or incoherent. 
-                1 represents a perfect summary that is highly relevant, factually correct, and coherent.
-                The summary should be a single sentence, accurate, and capture the main points of the full text.
+Use the following chain-of-thought reasoning to evaluate the summary:
+1. Does the summary accurately represent the full text?
+2. Is the summary factually correct?
+3. Is the summary coherent and easy to understand? 
 
-                Use the following chain-of-thought reasoning to evaluate the summary:
-                1. Does the summary accurately represent the full text?
-                2. Is the summary factually correct?
-                3. Is the summary coherent and easy to understand? 
+Your response should only be a double precision number that represents the score.
 
-                Your response should only be a double precision number that represents the score.
-                """,
+Below, you are given the full text and its summarization.
+
+{format}
+
+### Score:
+""",
                     max_tokens=5,
                     temperature=0.2,
                 )
@@ -202,12 +212,11 @@ class RLAIF:
 
         # Generation kwargs
         generation_kwargs = {
-            "temperature": 0.3, # lower results in nan probabilities
-            "top_p": 1.0,
+            "min_length": -1,
             "top_k": 0.0,
+            "top_p": 1.0,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
-            "num_beams": 4, # next token distribution can be too steep for beam search logic even with high temperature
             "max_new_tokens": 150,
         }
 
@@ -250,10 +259,7 @@ class RLAIF:
             reward_tensors = []
             for prompt, summary in zip(prompts, response):
                 score = self.score_summaries(prompt, response)  # utilises cohere API
-                reward_tensors.append(torch.tensor(score))
-
-            # normalise the rewards; this is important for the PPO algorithm
-            # reward_tensors = (reward_tensors - reward_tensors.mean()) / (reward_tensors.std())
+                reward_tensors.append(torch.tensor(score).float())
 
             # Convert the prompts to tensors
             prompt_tensors = [torch.tensor(tensor).long() for tensor in prompt_tensors]
