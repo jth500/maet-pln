@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 from utils import update_kwargs
 
+
 class DatasetHandler(ABC):
     """
     A class used to handle the dataset used for training the model.
@@ -35,7 +36,13 @@ class DatasetHandler(ABC):
         Processes the data by loading the dataset, converting it to JSON format, splitting it into training and validation sets, and tokenizing the prompts.
     """
 
-    def __init__(self, dataset_name, tokenizer, data_size: int = 10000, data_dir: str = "data_json"):
+    def __init__(
+        self,
+        dataset_name,
+        tokenizer,
+        data_size: int = 10000,
+        data_dir: str = "data_json",
+    ):
         self.dataset_name = dataset_name
         self.data_dir = data_dir
         self.tokenizer = tokenizer
@@ -102,8 +109,10 @@ class GPT2DatasetHandler(DatasetHandler):
     def generate_prompt(self, input, output=""):
         if output:
             output = output + self.tokenizer.eos_token
-        return self.tokenizer.bos_token + self.template.format(input=input, output=output)
-    
+        return self.tokenizer.bos_token + self.template.format(
+            input=input, output=output
+        )
+
     def tokenize(self, prompt, **kwargs):
         """
         Tokenizes the given prompt using the tokenizer.
@@ -116,10 +125,10 @@ class GPT2DatasetHandler(DatasetHandler):
         """
         defaults = dict(
             truncation=True,
-            max_length=1024, # gpt 2 specific; should we keep constant for comparatives?
+            max_length=1024,  # gpt 2 specific; should we keep constant for comparatives?
             padding=False,
             return_tensors=None,
-            )
+        )
         kwargs = update_kwargs(kwargs, defaults)
         result = self.tokenizer(prompt, add_special_tokens=False, **kwargs)
         result["labels"] = result["input_ids"].copy()
@@ -144,8 +153,7 @@ class GPT2DatasetHandler(DatasetHandler):
             )
         else:
             full_prompt = self.generate_prompt(
-                data_point["input"],
-                data_point["output"]
+                data_point["input"], data_point["output"]
             )
         tokenized_full_prompt = self.tokenize(full_prompt)
 
@@ -165,7 +173,9 @@ class GPT2DatasetHandler(DatasetHandler):
         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
 
         if rlaif:
-            sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
+            sft_rlaif = train_val["train"].train_test_split(
+                test_size=0.2, shuffle=True, seed=42
+            )  # split for sft and rlaif; rlaif does not need outputs
             sft_train_data = (
                 sft_rlaif["test"]
                 .shuffle(seed=42)
@@ -203,122 +213,136 @@ class GPT2DatasetHandler(DatasetHandler):
             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 150
         )
 
-        columns = ['input', 'output', 'input_ids', 'attention_mask', 'labels']
-        sft_train_data.set_format(type='torch', columns=columns)
+        columns = ["input", "output", "input_ids", "attention_mask", "labels"]
+        sft_train_data.set_format(type="torch", columns=columns)
         if rlaif_train_data:
-            rlaif_train_data.set_format(type='torch', columns=columns)
-        val_data.set_format(type='torch', columns=columns)
+            rlaif_train_data.set_format(type="torch", columns=columns)
+        val_data.set_format(type="torch", columns=columns)
 
         return sft_train_data, rlaif_train_data, val_data
-    
 
-# class T5DatasetHandler(DatasetHandler):
-#     # Encoder-decoder architecture
-#     def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
-#         super().__init__(dataset_name, tokenizer, data_dir)
 
-#     @property
-#     def template(self):
-#         return """summarize: {input}"""
-    
-#     def generate_prompt(self, data_point):
-#         data_point['input'] = self.template.format(input=data_point['input'])
-#         data_point['output'] = "<s>{output}</s>".format(output=data_point['output'])
-#         return data_point
-    
-#     def generate_and_tokenize_prompt(self, data_point):
-#         """
-#         Generates a full prompt using the input and output from the given data point,
-#         and then tokenizes the full prompt using the provided tokenizer.
+class T5DatasetHandler(DatasetHandler):
+    # Encoder-decoder architecture
+    def __init__(self, dataset_name, tokenizer, data_dir: str = "data_json"):
+        super().__init__(dataset_name, tokenizer, data_dir=data_dir)
 
-#         Args:
-#             data_point (dict): A dictionary containing the input and output data.
-#             tokenizer: The tokenizer object used for tokenization.
+    @property
+    def template(self):
+        return """summarize: {input}"""
 
-#         Returns:
-#             tokenized_full_prompt: The tokenized version of the full prompt.
-#         """
-#         defaults = dict(
-#             truncation=True,
-#             padding=False,
-#             return_tensors=None,
-#             )
-#         input_tokens = self.tokenizer(data_point["input"], add_special_tokens=False, max_length=1024, **defaults)
-#         target_tokens = self.tokenizer(data_point["output"], add_special_tokens=False, max_length=1024, **defaults)
+    def generate_prompt(self, data_point):
+        data_point["input"] = self.template.format(input=data_point["input"])
+        data_point["output"] = "<s>{output}</s>".format(output=data_point["output"])
+        return data_point
 
-#         tokenized_full_prompt = {
-#             'input_ids': input_tokens['input_ids'], 
-#             'attention_mask': input_tokens['attention_mask'],
-#             'decoder_input_ids': target_tokens['input_ids'],
-#             'decoder_attention_mask': target_tokens['attention_mask'],
-#             'labels': target_tokens['input_ids']
-#         }
-#         return tokenized_full_prompt
-    
-#     def process_data(self, input_label="prompt", target_label="summary", rlaif=False):
-#         """
-#         Process the data for training and validation.
+    def generate_and_tokenize_prompt(self, data_point):
+        """
+        Generates a full prompt using the input and output from the given data point,
+        and then tokenizes the full prompt using the provided tokenizer.
 
-#         Returns:
-#             train_data (Dataset): Processed training data.
-#             val_data (Dataset): Processed validation data.
-#         """
-#         self._data_to_json(input_label, target_label)
+        Args:
+            data_point (dict): A dictionary containing the input and output data.
+            tokenizer: The tokenizer object used for tokenization.
 
-#         data = load_dataset("json", data_files="data_json")
-#         train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
-        
-#         if rlaif:
-#             sft_rlaif = train_val["train"].train_test_split(test_size=0.2, shuffle=True, seed=42) # split for sft and rlaif; rlaif does not need outputs
-#             sft_train_data = (
-#                 sft_rlaif["test"]
-#                 .shuffle(seed=42)
-#                 .map(lambda x: self.generate_prompt(x))
-#                 .map(lambda x: self.generate_and_tokenize_prompt(x))
-#             )
-#             rlaif_train_data = (
-#                 sft_rlaif["train"]
-#                 .shuffle(seed=42)
-#                 .map(lambda x: self.generate_prompt(x))
-#                 .map(lambda x: self.generate_and_tokenize_prompt(x))
-#             )
+        Returns:
+            tokenized_full_prompt: The tokenized version of the full prompt.
+        """
+        defaults = dict(
+            truncation=True,
+            padding=False,
+            return_tensors=None,
+        )
+        input_tokens = self.tokenizer(
+            data_point["input"], add_special_tokens=False, max_length=1024, **defaults
+        )
+        target_tokens = self.tokenizer(
+            data_point["output"], add_special_tokens=False, max_length=1024, **defaults
+        )
 
-#         else:
-#             sft_train_data = (
-#                 train_val["train"]
-#                 .shuffle(seed=42)
-#                 .map(lambda x: self.generate_prompt(x))
-#                 .map(lambda x: self.generate_and_tokenize_prompt(x))
-#             )
-#             rlaif_train_data = None
+        tokenized_full_prompt = {
+            "input_ids": input_tokens["input_ids"],
+            "attention_mask": input_tokens["attention_mask"],
+            "decoder_input_ids": target_tokens["input_ids"],
+            "decoder_attention_mask": target_tokens["attention_mask"],
+            "labels": target_tokens["input_ids"],
+        }
+        return tokenized_full_prompt
 
-#         val_data = (
-#             train_val["test"]
-#             .shuffle(seed=42)
-#             .map(lambda x: self.generate_prompt(x))
-#             .map(lambda x: self.generate_and_tokenize_prompt(x))
-#         )
+    def process_data(self, input_label="prompt", target_label="summary", rlaif=False):
+        """
+        Process the data for training and validation.
 
-#         # only allow inputs with token length less than models max length
-#         sft_train_data = sft_train_data.filter(
-#             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
-#         )
-#         if rlaif_train_data:
-#             rlaif_train_data = rlaif_train_data.filter(
-#                 lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
-#             )
-#         val_data = val_data.filter(
-#             lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
-#         )
+        Returns:
+            train_data (Dataset): Processed training data.
+            val_data (Dataset): Processed validation data.
+        """
+        self._data_to_json(input_label, target_label)
 
-#         columns = ['input', 'output', 'input_ids', 'decoder_input_ids', 'attention_mask', 'decoder_attention_mask', 'labels']
-#         sft_train_data.set_format(type='torch', columns=columns)
-#         if rlaif_train_data:
-#             rlaif_train_data.set_format(type='torch', columns=columns)
-#         val_data.set_format(type='torch', columns=columns)
+        data = load_dataset("json", data_files="data_json")
+        train_val = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
 
-#         return sft_train_data, rlaif_train_data, val_data
-    
+        if rlaif:
+            sft_rlaif = train_val["train"].train_test_split(
+                test_size=0.2, shuffle=True, seed=42
+            )  # split for sft and rlaif; rlaif does not need outputs
+            sft_train_data = (
+                sft_rlaif["test"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = (
+                sft_rlaif["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+
+        else:
+            sft_train_data = (
+                train_val["train"]
+                .shuffle(seed=42)
+                .map(lambda x: self.generate_prompt(x))
+                .map(lambda x: self.generate_and_tokenize_prompt(x))
+            )
+            rlaif_train_data = None
+
+        val_data = (
+            train_val["test"]
+            .shuffle(seed=42)
+            .map(lambda x: self.generate_prompt(x))
+            .map(lambda x: self.generate_and_tokenize_prompt(x))
+        )
+
+        # only allow inputs with token length less than models max length
+        sft_train_data = sft_train_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length
+        )
+        if rlaif_train_data:
+            rlaif_train_data = rlaif_train_data.filter(
+                lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
+            )
+        val_data = val_data.filter(
+            lambda x: len(x["input_ids"]) < self.tokenizer.model_max_length - 50
+        )
+
+        columns = [
+            "input",
+            "output",
+            "input_ids",
+            "decoder_input_ids",
+            "attention_mask",
+            "decoder_attention_mask",
+            "labels",
+        ]
+        sft_train_data.set_format(type="torch", columns=columns)
+        if rlaif_train_data:
+            rlaif_train_data.set_format(type="torch", columns=columns)
+        val_data.set_format(type="torch", columns=columns)
+
+        return sft_train_data, rlaif_train_data, val_data
+
 
 # class BARTDatasetHandler(DatasetHandler):
 #     # Denoising autoencoder architecture
@@ -333,12 +357,12 @@ class GPT2DatasetHandler(DatasetHandler):
 #             """### TEXT:\n{input}\n\n"""
 #             """### SUMMARY:</s>"""
 #         )
-    
+
 #     def generate_prompt(self, data_point):
 #         data_point['input'] = self.template.format(input=data_point['input'])
 #         data_point['output'] = "<s>{output}</s>".format(output=data_point['output'])
 #         return data_point
-    
+
 #     def generate_and_tokenize_prompt(self, data_point):
 #         """
 #         Generates a full prompt using the input and output from the given data point,
@@ -360,12 +384,12 @@ class GPT2DatasetHandler(DatasetHandler):
 #         target_tokens = self.tokenizer(data_point["output"], add_special_tokens=False, max_length=1024, **defaults)
 
 #         tokenized_full_prompt = {
-#             'input_ids': input_tokens['input_ids'], 
+#             'input_ids': input_tokens['input_ids'],
 #             'attention_mask': input_tokens['attention_mask'],
 #             'labels': target_tokens['input_ids']
 #         }
 #         return tokenized_full_prompt
-    
+
 #     def process_data(self, input_label="prompt", target_label="summary", rlaif=False):
 #         """
 #         Process the data for training and validation.
@@ -429,6 +453,6 @@ class GPT2DatasetHandler(DatasetHandler):
 #         val_data.set_format(type='torch', columns=columns)
 
 #         return sft_train_data, rlaif_train_data, val_data
-    
+
 
 # if __name__ == "__main__":
