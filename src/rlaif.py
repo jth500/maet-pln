@@ -3,6 +3,7 @@ import torch
 from abc import ABC
 
 import os
+
 # from dotenv import load_dotenv
 
 # load_dotenv()
@@ -17,8 +18,10 @@ from trl import (
     AutoModelForSeq2SeqLMWithValueHead,
     create_reference_model,
 )
-from peft import LoraConfig
+from peft import LoraConfig, TaskType
 from torch.optim import Adam
+import re
+import cohere
 
 from utils import update_kwargs
 
@@ -53,18 +56,15 @@ class RLAIF:
             lora_alpha=16,
             lora_dropout=0.05,
             bias="none",
-            task_type="CAUSAL_LM"
+            task_type="CAUSAL_LM" if "gpt2" in self.base_dir else TaskType.SEQ_2_SEQ_LM,
         )
         if "gpt2" in self.base_dir:
             base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
-                self.base_dir,
-                peft_config=lora_config,
-                device_map="auto"
+                self.base_dir, peft_config=lora_config, device_map="auto"
             )
         else:
             base_model = AutoModelForSeq2SeqLMWithValueHead.from_pretrained(
-                self.base_dir,
-                peft_config=lora_config
+                self.base_dir, peft_config=lora_config
             )
         return base_model
 
@@ -85,12 +85,12 @@ class RLAIF:
     def ppo_config(self, **kwargs):
         if self._ppo_config is None:
             defaults = dict(
-                model_name = self.base_dir,
-                learning_rate = 2e-5,
-                ppo_epochs = self.ppo_epochs,
-                batch_size = 1,
-                mini_batch_size = 1,
-                seed = 42,
+                model_name=self.base_dir,
+                learning_rate=2e-5,
+                ppo_epochs=self.ppo_epochs,
+                batch_size=1,
+                mini_batch_size=1,
+                seed=42,
             )
             kwargs = update_kwargs(kwargs, defaults)
             self._ppo_config = PPOConfig(**kwargs)
@@ -105,7 +105,7 @@ class RLAIF:
         if self._ppo_trainer is None:
             self._ppo_trainer = self.create_ppo_trainer()
         return self._ppo_trainer
-    
+
     @ppo_trainer.setter
     def ppo_trainer(self, ppo_trainer):
         self._ppo_trainer = ppo_trainer
@@ -120,7 +120,9 @@ class RLAIF:
         Returns:
             PPOTrainer: The created PPO trainer.
         """
-        optimizer=Adam(filter(lambda p: p.requires_grad, self.base_model.parameters()), lr=2e-5)
+        optimizer = Adam(
+            filter(lambda p: p.requires_grad, self.base_model.parameters()), lr=2e-5
+        )
         self._ppo_trainer = PPOTrainer(
             config=self.ppo_config,
             model=self.base_model,
@@ -144,9 +146,6 @@ class RLAIF:
         Returns:
             float: The score of the summarized text.
         """
-
-        import re
-        import cohere
 
         co = cohere.Client(cohere_api_key)
 
@@ -192,7 +191,7 @@ Below, you are given the full text and its summarization.
 
         return score
 
-    def train_model(self, max_ppo_steps=float('inf')):
+    def train_model(self, max_ppo_steps=float("inf")):
         """
         Trains the model using PPO.
 
@@ -222,7 +221,7 @@ Below, you are given the full text and its summarization.
 
         ref_ppo_delta = []
         returns_mean = []
-        kl = [] 
+        kl = []
         loss = []
 
         # PPO training loop
@@ -241,18 +240,24 @@ Below, you are given the full text and its summarization.
                 # generation_kwargs["max_new_tokens"] = max_new_tokens
                 max_new_tokens = generation_kwargs["max_new_tokens"]
                 prompt_tensor = torch.tensor(prompt_tensor).to(self.device)
-                generation_output = self._ppo_trainer.generate(prompt_tensor, **generation_kwargs)
+                generation_output = self._ppo_trainer.generate(
+                    prompt_tensor, **generation_kwargs
+                )
                 output = generation_output[0]
-                summary_text = self.tokenizer.decode(output, skip_special_tokens=True) 
+                summary_text = self.tokenizer.decode(output, skip_special_tokens=True)
                 if "### TL;DR:" in summary_text:
                     summary_text = summary_text.split("### TL;DR:")[1].strip()
                 # print(summary_text)
                 summary = self.tokenizer.encode(summary_text)
                 summary_tensor = torch.tensor(summary)
-                summary_tensors.append(summary_tensor.squeeze()[-max_new_tokens:]) # truncate to max_new_tokens if necessary
+                summary_tensors.append(
+                    summary_tensor.squeeze()[-max_new_tokens:]
+                )  # truncate to max_new_tokens if necessary
 
             # Decode the summary tensors to get the summaries
-            batch["response"] = [self.tokenizer.decode(r.squeeze()) for r in summary_tensors]
+            batch["response"] = [
+                self.tokenizer.decode(r.squeeze()) for r in summary_tensors
+            ]
             response = batch["response"]
 
             # Compute the rewards
@@ -263,7 +268,9 @@ Below, you are given the full text and its summarization.
 
             # Convert the prompts to tensors
             prompt_tensors = [torch.tensor(tensor).long() for tensor in prompt_tensors]
-            summary_tensors = [torch.tensor(tensor).long() for tensor in summary_tensors]
+            summary_tensors = [
+                torch.tensor(tensor).long() for tensor in summary_tensors
+            ]
             reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
 
             # Step the PPO trainer
