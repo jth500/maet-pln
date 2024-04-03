@@ -71,4 +71,4 @@ class T5TokenizationHandler(TokenizationHandler):
 
     @property
     def defaults(self):
-        return {}
+        return dict(truncation=True)
