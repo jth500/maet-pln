@@ -3,11 +3,14 @@ import torch
 from abc import ABC
 
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-cohere_api_key = os.getenv("COHERE_API_KEY")
+# from dotenv import load_dotenv
 
+# load_dotenv()
+# cohere_api_key = os.getenv("COHERE_API_KEY")
+cohere_api_key = "ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz"
+
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from trl import (
     PPOTrainer,
     PPOConfig,
@@ -15,14 +18,17 @@ from trl import (
     AutoModelForSeq2SeqLMWithValueHead,
     create_reference_model,
 )
-from trl.core import LengthSampler
+from peft import LoraConfig, TaskType
+from torch.optim import Adam
+import re
+import cohere
 
 from utils import update_kwargs
 
 
 class RLAIF:
 
-    def __init__(self, base_dir, tokenizer, save_dir, train_dataset):
+    def __init__(self, base_dir, tokenizer, save_dir, train_dataset, ppo_epochs=4):
         self.base_dir = base_dir  # The base model is the SFT model
         self.save_dir = save_dir
         self.tokenizer = tokenizer
@@ -31,6 +37,7 @@ class RLAIF:
         self.ppo_config = None
         self.ppo_trainer = None
         self.train_dataset = train_dataset
+        self.ppo_epochs = ppo_epochs
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     @property
@@ -44,13 +51,20 @@ class RLAIF:
         self._base_model = base
 
     def load_base_model(self):
+        lora_config = LoraConfig(
+            r=8,
+            lora_alpha=16,
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM" if "gpt2" in self.base_dir else TaskType.SEQ_2_SEQ_LM,
+        )
         if "gpt2" in self.base_dir:
             base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
-                self.base_dir
+                self.base_dir, peft_config=lora_config, device_map="auto"
             )
         else:
             base_model = AutoModelForSeq2SeqLMWithValueHead.from_pretrained(
-                self.base_dir
+                self.base_dir, peft_config=lora_config
             )
         return base_model
 
@@ -70,13 +84,14 @@ class RLAIF:
     @property
     def ppo_config(self, **kwargs):
         if self._ppo_config is None:
-            defaults = {
-                "model_name": self.base_dir,
-                "learning_rate": 1e-5,
-                "ppo_epochs": 1,
-                "mini_batch_size": 1,
-                "batch_size": 2,
-            }
+            defaults = dict(
+                model_name=self.base_dir,
+                learning_rate=2e-5,
+                ppo_epochs=self.ppo_epochs,
+                batch_size=1,
+                mini_batch_size=1,
+                seed=42,
+            )
             kwargs = update_kwargs(kwargs, defaults)
             self._ppo_config = PPOConfig(**kwargs)
         return self._ppo_config
@@ -90,7 +105,7 @@ class RLAIF:
         if self._ppo_trainer is None:
             self._ppo_trainer = self.create_ppo_trainer()
         return self._ppo_trainer
-    
+
     @ppo_trainer.setter
     def ppo_trainer(self, ppo_trainer):
         self._ppo_trainer = ppo_trainer
@@ -105,6 +120,9 @@ class RLAIF:
         Returns:
             PPOTrainer: The created PPO trainer.
         """
+        optimizer = Adam(
+            filter(lambda p: p.requires_grad, self.base_model.parameters()), lr=2e-5
+        )
         self._ppo_trainer = PPOTrainer(
             config=self.ppo_config,
             model=self.base_model,
@@ -112,6 +130,7 @@ class RLAIF:
             tokenizer=self.tokenizer,
             dataset=self.train_dataset,
             data_collator=self._collator,
+            optimizer=optimizer,
         )
         return self._ppo_trainer
 
@@ -128,9 +147,6 @@ class RLAIF:
             float: The score of the summarized text.
         """
 
-        import re
-        import cohere
-
         co = cohere.Client(cohere_api_key)
 
         score = 0
@@ -143,16 +159,26 @@ class RLAIF:
                 co.generate(
                     model="command-nightly",
                     # Can this prompt be tailored to cohere's command-nightly model?
-                    prompt=f"""You are an expert in text summarization. Below, you are given the full text and its summarization.
+                    prompt=f"""You are an expert in text summarization.
 
-                {format}
+Your role is to rate the provided summarization with scores ranging from 0.01 to 0.99, where: 0.01 is the lowest score, 0.99 is the highest score.
+0.01 represents a summary that is completely irrelevant, factually incorrect, or incoherent. 
+0.99 represents a perfect summary that is highly relevant, factually correct, and coherent.
+The summary should be a single sentence, accurate, and capture the main points of the full text.
 
-                Your role is to rate the provided summarization with scores ranging from 0 to 1, where: 0 is the lowest score, 1 is the highest score.
-                0 represents a summary that is completely irrelevant, factually incorrect, or incoherent. 
-                1 represents a perfect summary that is highly relevant, factually correct, and coherent.
-                The summary should be a single sentence, accurate, and capture the main points of the full text.
-                Your response should only be a double precision number that represents the scoring rate.
-                """,
+Use the following chain-of-thought reasoning to evaluate the summary:
+1. Does the summary accurately represent the full text?
+2. Is the summary factually correct?
+3. Is the summary coherent and easy to understand? 
+
+Your response should only be a double precision number that represents the score.
+
+Below, you are given the full text and its summarization.
+
+{format}
+
+### Score:
+""",
                     max_tokens=5,
                     temperature=0.2,
                 )
@@ -165,7 +191,7 @@ class RLAIF:
 
         return score
 
-    def train_model(self, max_ppo_steps=float('inf')):
+    def train_model(self, max_ppo_steps=float("inf")):
         """
         Trains the model using PPO.
 
@@ -185,17 +211,18 @@ class RLAIF:
 
         # Generation kwargs
         generation_kwargs = {
-            "temperature": 0.3,
-            "top_p": 0.3,
+            "min_length": -1,
+            "top_k": 0.0,
+            "top_p": 1.0,
             "do_sample": True,
             "pad_token_id": self.base_model.config.pad_token_id,
-            # "num_beams": 3, # next token distribution can be too steep for beam search logic even with high temperature
-            "max_new_tokens": 50,
+            "max_new_tokens": 150,
         }
 
-        objective_kl = []  # KL divergence between the new and old policies
-        returns_mean = []  # Mean of the returns
-        advantages_mean = []  # Mean of the advantages
+        ref_ppo_delta = []
+        returns_mean = []
+        kl = []
+        loss = []
 
         # PPO training loop
         for step, batch in enumerate(tqdm(self.ppo_trainer.dataloader)):
@@ -213,23 +240,38 @@ class RLAIF:
                 # generation_kwargs["max_new_tokens"] = max_new_tokens
                 max_new_tokens = generation_kwargs["max_new_tokens"]
                 prompt_tensor = torch.tensor(prompt_tensor).to(self.device)
-                summary = self._ppo_trainer.generate(prompt_tensor, **generation_kwargs)
-                summary_tensors.append(summary.squeeze()[-max_new_tokens:])
+                generation_output = self._ppo_trainer.generate(
+                    prompt_tensor, **generation_kwargs
+                )
+                output = generation_output[0]
+                summary_text = self.tokenizer.decode(output, skip_special_tokens=True)
+                if "### TL;DR:" in summary_text:
+                    summary_text = summary_text.split("### TL;DR:")[1].strip()
+                # print(summary_text)
+                summary = self.tokenizer.encode(summary_text)
+                summary_tensor = torch.tensor(summary)
+                summary_tensors.append(
+                    summary_tensor.squeeze()[-max_new_tokens:]
+                )  # truncate to max_new_tokens if necessary
 
             # Decode the summary tensors to get the summaries
-            batch["response"] = [self.tokenizer.decode(r.squeeze()) for r in summary_tensors]
+            batch["response"] = [
+                self.tokenizer.decode(r.squeeze()) for r in summary_tensors
+            ]
             response = batch["response"]
 
             # Compute the rewards
             reward_tensors = []
             for prompt, summary in zip(prompts, response):
                 score = self.score_summaries(prompt, response)  # utilises cohere API
-                reward_tensors.append(torch.tensor(score))
+                reward_tensors.append(torch.tensor(score).float())
 
             # Convert the prompts to tensors
-            prompt_tensors = [torch.tensor(tensor) for tensor in prompt_tensors]
-            # summary_tensors = [torch.tensor(tensor) for tensor in summary_tensors]
-            # reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
+            prompt_tensors = [torch.tensor(tensor).long() for tensor in prompt_tensors]
+            summary_tensors = [
+                torch.tensor(tensor).long() for tensor in summary_tensors
+            ]
+            reward_tensors = [torch.tensor(tensor) for tensor in reward_tensors]
 
             # Step the PPO trainer
             stats = self.ppo_trainer.step(
@@ -238,11 +280,12 @@ class RLAIF:
             self.ppo_trainer.log_stats(stats, batch, reward_tensors)
 
             # Log the stats
-            objective_kl.append(stats["objective/kl"])
+            ref_ppo_delta.append(stats["ppo/mean_non_score_reward"])
             returns_mean.append(stats["ppo/returns/mean"])
-            advantages_mean.append(stats["ppo/policy/advantages_mean"])
+            kl.append(stats["objective/kl"])
+            loss.append(stats["ppo/loss/value"])
 
-        return objective_kl, returns_mean, advantages_mean
+        return ref_ppo_delta, returns_mean, kl, loss
 
     def push_model_to_hub(self):
         """
