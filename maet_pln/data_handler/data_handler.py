@@ -4,8 +4,12 @@ import logging
 from abc import ABC, abstractmethod
 from data_handler.prompt_handler import GPT2PromptHandler, T5PromptHandler
 from pathlib import Path
+from dotenv import load_dotenv
+from huggingface_hub import login
+import os
 
 logger = logging.getLogger(__name__)
+load_dotenv()
 
 
 class DatasetHandler(ABC):
@@ -47,6 +51,7 @@ class DatasetHandler(ABC):
         data_size: int = 10000,
         data_dir: str = "data_json",
         save_locally=None,
+        push_to_hub: bool = True,
     ):
         self.dataset_name = dataset_name
         self.input_label = input_label
@@ -56,18 +61,22 @@ class DatasetHandler(ABC):
         self.rlaif = rlaif
         self.data_size = data_size
         self.data_dir = data_dir
-        self.save_locally = save_locally
+        self._hf_login_attempted = False
+        self.push_to_hub = push_to_hub
+        self.save_locally = save_locally is True or (
+            save_locally is None and data_size < 10**6
+        )
 
     @property
-    def save_locally(self):
-        return self._save_locally
+    def push_to_hub(self):
+        return self._push_to_hub
 
-    @save_locally.setter
-    def save_locally(self, val):
-        if val is True or (val is None and self.data_size < 10**6):
-            self._save_locally = True
-        else:
-            self._save_locally = False
+    @push_to_hub.setter
+    def push_to_hub(self, val):
+        if val and not self._hf_login_attempted:
+            self._hf_login_attempted = True
+            login(os.environ["HF_TOKEN"], add_to_git_credential=True)
+        self._push_to_hub = val
 
     @property
     @abstractmethod
@@ -148,8 +157,21 @@ class DatasetHandler(ABC):
             d = {"sft": sft_train_data, "val": val_data}
         return d
 
-    def save_dataset(self, dataset) -> None:
-        pass
+    def save_dataset(self, d, k):
+        if self.save_locally:
+            try:
+                d.save_to_disk(str(self.DATA_DIR / f"processed/{self.ID}_{k}"))
+            except Exception as e:
+                msg = "Couldn't save locally"
+                logger.exception(msg, exc_info=e)
+                pass
+        if self.push_to_hub:
+            try:
+                d.push_to_hub(f"{os.environ['HF_UN']}/{self.ID}_{k}")
+            except Exception as e:
+                msg = "Couldn't push the data to HF. Is HF_UN  set in .env?"
+                logger.exception(msg, exc_info=e)
+                pass
 
     def process_data(self) -> list:
         try:
@@ -167,8 +189,7 @@ class DatasetHandler(ABC):
             datasets[k] = datasets[k].map(tk)
             datasets[k] = datasets[k].filter(truncator)
             datasets[k].set_format(type="torch", columns=self.EXPECTED_COLUMNS)
-            if self.save_locally:
-                datasets[k].save_to_disk(str(self.DATA_DIR / f"processed/{k}"))
+            self.save_dataset(datasets[k], k)
         return list(datasets.values())
 
 
@@ -177,6 +198,7 @@ class GPT2DatasetHandler(DatasetHandler):
 
     EXPECTED_COLUMNS = ["input", "output", "input_ids", "attention_mask", "labels"]
     MAX_LENGTHS = {"sft": 0, "rlaif": 150, "val": 150}
+    ID = "GPT"
 
     def __init__(
         self,
@@ -189,6 +211,7 @@ class GPT2DatasetHandler(DatasetHandler):
         data_size=100,
         data_dir: str = "data_json",
         save_locally=None,
+        push_to_hub=True,
     ):
         super().__init__(
             dataset_name,
@@ -200,6 +223,7 @@ class GPT2DatasetHandler(DatasetHandler):
             data_size,
             data_dir,
             save_locally,
+            push_to_hub,
         )
 
 
@@ -215,6 +239,7 @@ class T5DatasetHandler(DatasetHandler):
         "labels",
     ]
     MAX_LENGTHS = {"sft": 0, "rlaif": 50, "val": 50}
+    ID = "T5"
 
     # Encoder-decoder architecture
     def __init__(
@@ -228,6 +253,7 @@ class T5DatasetHandler(DatasetHandler):
         data_size=100,
         data_dir: str = "data_json",
         save_locally=None,
+        push_to_hub=True,
     ):
         super().__init__(
             dataset_name,
@@ -239,6 +265,7 @@ class T5DatasetHandler(DatasetHandler):
             data_size,
             data_dir,
             save_locally,
+            push_to_hub,
         )
 
 

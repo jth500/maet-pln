@@ -18,7 +18,9 @@ DATASET_NAME = "EdinburghNLP/xsum"
 def test_gpt2_dataset_handler():
     tk = GPT2TokenizationHandler()
     tokenizer = tk.create_tokenizer()
-    data_handler = GPT2DatasetHandler(DATASET_NAME, tokenizer, data_size=100)
+    data_handler = GPT2DatasetHandler(
+        DATASET_NAME, tokenizer, data_size=100, push_to_hub=False
+    )
     data_handler.data_to_json()
     data = data_handler.process_data()
     assert len(data) == 2
@@ -36,7 +38,7 @@ def test_gpt2_dataset_handler_rlaif():
     tk = GPT2TokenizationHandler()
     tokenizer = tk.create_tokenizer()
     data_handler = GPT2DatasetHandler(
-        DATASET_NAME, tokenizer, rlaif=True, data_size=100
+        DATASET_NAME, tokenizer, rlaif=True, data_size=100, push_to_hub=False
     )
     data_handler.data_to_json()
     data = data_handler.process_data()
@@ -54,7 +56,9 @@ def test_gpt2_dataset_handler_rlaif():
 def test_t5_dataset_handler():
     tk = T5TokenizationHandler()
     tokenizer = tk.create_tokenizer()
-    data_handler = T5DatasetHandler(DATASET_NAME, tokenizer, data_size=100)
+    data_handler = T5DatasetHandler(
+        DATASET_NAME, tokenizer, data_size=100, push_to_hub=False
+    )
     data_handler.data_to_json()
     data = data_handler.process_data()
     assert len(data[0]) == 53
