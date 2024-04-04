@@ -90,14 +90,6 @@ class DatasetHandler(ABC):
         pass
 
     @property
-    def tokenizer(self):
-        return self._tokenizer
-
-    @tokenizer.setter
-    def tokenizer(self, tk):
-        self._tokenizer = tk
-
-    @property
     def max_lengths(self):
         return {
             "sft": self.tokenizer.model_max_length,
@@ -144,19 +136,11 @@ class DatasetHandler(ABC):
 
     def train_val_split(self, data) -> dict:
         data = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
-        val_data = data["test"]
         if self.rlaif:
-            sft_rlaif = data["train"].train_test_split(
-                test_size=0.2, shuffle=True, seed=42
-            )
-            sft_train_data = sft_rlaif["test"]
-            rlaif_train_data = sft_rlaif["train"]
-            d = {"sft": sft_train_data, "rlaif": rlaif_train_data, "val": val_data}
+            s = data["train"].train_test_split(test_size=0.2, shuffle=True, seed=42)
+            return {"sft": s["test"], "rlaif": s["train"], "val": data["test"]}
         else:
-            sft_train_data = data["train"]
-            rlaif_train_data = None
-            d = {"sft": sft_train_data, "val": val_data}
-        return d
+            return {"sft": data["train"], "val": data["test"]}
 
     def save_dataset(self, d, k):
         if self.save_locally:
