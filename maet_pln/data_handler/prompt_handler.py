@@ -48,7 +48,7 @@ class GPT2PromptHandler(PromptHandler):
             # trim off the output
             p = "TL;DR:\n"
             i = full_prompt.index(p) + len(p)
-            full_prompt = full_prompt[i:]
+            full_prompt = full_prompt[:i]
         tokenized_full_prompt = self.tokenizer(full_prompt, add_special_tokens=False)
         tokenized_full_prompt["labels"] = tokenized_full_prompt["input_ids"].copy()
         return tokenized_full_prompt
