@@ -16,7 +16,7 @@ class PromptHandler(ABC):
         # t5 takes input and output, although output not always needed for RL
         pass
 
-    def generate_and_tokenize_prompt(self, row, output=True):
+    def tokenize_prompt(self, row, output=True):
         # to be mapped over the dataset, so it takes a row
         # gpt2 takes input and output columns from that row
         pass
@@ -42,7 +42,7 @@ class GPT2PromptHandler(PromptHandler):
             input=row["input"], output=output
         )
 
-    def generate_and_tokenize_prompt(self, row, output=True):
+    def tokenize_prompt(self, row, output=True):
         full_prompt = self.generate_prompt(row)
         if not output:
             # trim off the output
@@ -67,7 +67,7 @@ class T5PromptHandler(PromptHandler):
         row["output"] = "<s>{output}</s>".format(output=row["output"])
         return row
 
-    def generate_and_tokenize_prompt(self, row, output=True):
+    def tokenize_prompt(self, row, output=True):
         """
         Generates a full prompt using the input and output from the given data point,
         and then tokenizes the full prompt using the provided tokenizer.

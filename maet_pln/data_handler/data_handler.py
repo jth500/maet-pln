@@ -1,13 +1,10 @@
 import json
-import abc
 from datasets import load_dataset
 import logging
 from abc import ABC, abstractmethod
+from data_handler.prompt_handler import GPT2PromptHandler, T5PromptHandler
 
 logger = logging.getLogger(__name__)
-
-from utils import update_kwargs
-from data_handler.prompt_handler import GPT2PromptHandler, T5PromptHandler
 
 
 class DatasetHandler(ABC):
@@ -120,30 +117,21 @@ class DatasetHandler(ABC):
                     }
                     f.write(json.dumps(newitem) + "\n")
 
-    def _rlaif_split(self, data):
-        # split for sft and rlaif; rlaif does not need outputs
-        sft_rlaif = data["train"].train_test_split(test_size=0.2, shuffle=True, seed=42)
-        sft_train_data = sft_rlaif["test"].map(
-            lambda x: self.prompt_handler.generate_and_tokenize_prompt(x)
-        )
-        rlaif_train_data = sft_rlaif["train"].map(
-            lambda x: self.prompt_handler.generate_and_tokenize_prompt(x, output=False)
-        )
-        return sft_train_data, rlaif_train_data
-
     def train_val_split(self, data):
         data = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
+        val_data = data["test"]
         if self.rlaif:
-            sft_train_data, rlaif_train_data = self._rlaif_split(data)
-        else:
-            rlaif_train_data = None
-            sft_train_data = data["train"].map(
-                lambda x: self.prompt_handler.generate_and_tokenize_prompt(x)
+            sft_rlaif = data["train"].train_test_split(
+                test_size=0.2, shuffle=True, seed=42
             )
-        val_data = data["test"].map(
-            lambda x: self.prompt_handler.generate_and_tokenize_prompt(x, output=False)
-        )
-        return sft_train_data, rlaif_train_data, val_data
+            sft_train_data = sft_rlaif["test"]
+            rlaif_train_data = sft_rlaif["train"]
+            d = {"sft": sft_train_data, "rlaif": rlaif_train_data, "val": val_data}
+        else:
+            sft_train_data = data["train"]
+            rlaif_train_data = None
+            d = {"sft": sft_train_data, "val": val_data}
+        return d
 
     def process_data(self):
         try:
@@ -152,15 +140,15 @@ class DatasetHandler(ABC):
             raise FileNotFoundError("Have you run the thing first?")
 
         assert set(["input", "output"]) <= set(list(data["train"].features.keys()))
-        sft_train_data, rlaif_train_data, val_data = self.train_val_split(data)
+        datasets = self.train_val_split(data)
 
-        # Format datasets correctly
-        datasets = {"sft": sft_train_data, "rlaif": rlaif_train_data, "val": val_data}
-        for k, dataset in datasets.items():
-            if dataset:
-                truncator = lambda x: len(x["input_ids"]) < self.max_lengths[k]
-                datasets[k] = dataset.filter(truncator)
-                datasets[k].set_format(type="torch", columns=self.EXPECTED_COLUMNS)
+        # Add prompts and format datasets
+        for k in datasets.keys():
+            tk = lambda x: self.prompt_handler.tokenize_prompt(x, output=k == "sft")
+            truncator = lambda row: len(row["input_ids"]) < self.max_lengths[k]
+            datasets[k] = datasets[k].map(tk)
+            datasets[k] = datasets[k].filter(truncator)
+            datasets[k].set_format(type="torch", columns=self.EXPECTED_COLUMNS)
         return list(datasets.values())
 
 
