@@ -3,11 +3,13 @@ from datasets import load_dataset
 import logging
 from abc import ABC, abstractmethod
 from data_handler.prompt_handler import GPT2PromptHandler, T5PromptHandler
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 class DatasetHandler(ABC):
+    DATA_DIR = Path(__file__).parent.parent.parent / "data"
     """
     A class used to handle the dataset used for training the model.
 
@@ -109,7 +111,7 @@ class DatasetHandler(ABC):
 
         for key, ds in dataset_splits.items():
             # overwriting instead of appending - is this what we want?
-            with open("data_json", "w") as f:
+            with open(self.DATA_DIR / "raw/data_json", "w") as f:
                 for item in ds:
                     newitem = {
                         "input": item[self.input_label],
@@ -135,7 +137,7 @@ class DatasetHandler(ABC):
 
     def process_data(self):
         try:
-            data = load_dataset("json", data_files="data_json")
+            data = load_dataset("json", data_files=self.DATA_DIR / "raw/data_json")
         except FileNotFoundError:
             raise FileNotFoundError("Have you run the thing first?")
 

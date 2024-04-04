@@ -21,7 +21,27 @@ def test_gpt2_dataset_handler():
     data_handler = GPT2DatasetHandler(DATASET_NAME, tokenizer, data_size=100)
     data_handler.data_to_json()
     data = data_handler.process_data()
+    assert len(data) == 2
     assert len(data[0]) == 79
+    assert list(data[0].features.keys()) == [
+        "input",
+        "output",
+        "input_ids",
+        "attention_mask",
+        "labels",
+    ]
+
+
+def test_gpt2_dataset_handler_rlaif():
+    tk = GPT2TokenizationHandler()
+    tokenizer = tk.create_tokenizer()
+    data_handler = GPT2DatasetHandler(
+        DATASET_NAME, tokenizer, rlaif=True, data_size=100
+    )
+    data_handler.data_to_json()
+    data = data_handler.process_data()
+    assert len(data) == 3
+    assert len(data[0]) == 17
     assert list(data[0].features.keys()) == [
         "input",
         "output",
