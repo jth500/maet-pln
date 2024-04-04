@@ -66,6 +66,7 @@ class DatasetHandler(ABC):
         self.save_locally = save_locally is True or (
             save_locally is None and data_size < 10**6
         )
+        self.datasets = None
 
     @property
     def push_to_hub(self):
@@ -190,6 +191,7 @@ class DatasetHandler(ABC):
             datasets[k] = datasets[k].filter(truncator)
             datasets[k].set_format(type="torch", columns=self.EXPECTED_COLUMNS)
             self.save_dataset(datasets[k], k)
+        self.datasets = datasets
         return list(datasets.values())
 
 
