@@ -46,6 +46,7 @@ class DatasetHandler(ABC):
         target_label="summary",
         data_size: int = 10000,
         data_dir: str = "data_json",
+        save_locally=None,
     ):
         self.dataset_name = dataset_name
         self.input_label = input_label
@@ -55,6 +56,18 @@ class DatasetHandler(ABC):
         self.rlaif = rlaif
         self.data_size = data_size
         self.data_dir = data_dir
+        self.save_locally = save_locally
+
+    @property
+    def save_locally(self):
+        return self._save_locally
+
+    @save_locally.setter
+    def save_locally(self, val):
+        if val is True or (val is None and self.data_size < 10**6):
+            self._save_locally = True
+        else:
+            self._save_locally = False
 
     @property
     @abstractmethod
@@ -119,7 +132,7 @@ class DatasetHandler(ABC):
                     }
                     f.write(json.dumps(newitem) + "\n")
 
-    def train_val_split(self, data):
+    def train_val_split(self, data) -> dict:
         data = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
         val_data = data["test"]
         if self.rlaif:
@@ -135,9 +148,12 @@ class DatasetHandler(ABC):
             d = {"sft": sft_train_data, "val": val_data}
         return d
 
-    def process_data(self):
+    def save_dataset(self, dataset) -> None:
+        pass
+
+    def process_data(self) -> list:
         try:
-            data = load_dataset("json", data_files=self.DATA_DIR / "raw/data_json")
+            data = load_dataset("json", data_files=str(self.DATA_DIR / "raw/data_json"))
         except FileNotFoundError:
             raise FileNotFoundError("Have you run the thing first?")
 
@@ -151,6 +167,8 @@ class DatasetHandler(ABC):
             datasets[k] = datasets[k].map(tk)
             datasets[k] = datasets[k].filter(truncator)
             datasets[k].set_format(type="torch", columns=self.EXPECTED_COLUMNS)
+            if self.save_locally:
+                datasets[k].save_to_disk(str(self.DATA_DIR / f"processed/{k}"))
         return list(datasets.values())
 
 
@@ -170,6 +188,7 @@ class GPT2DatasetHandler(DatasetHandler):
         target_label="summary",
         data_size=100,
         data_dir: str = "data_json",
+        save_locally=None,
     ):
         super().__init__(
             dataset_name,
@@ -180,6 +199,7 @@ class GPT2DatasetHandler(DatasetHandler):
             target_label,
             data_size,
             data_dir,
+            save_locally,
         )
 
 
@@ -207,6 +227,7 @@ class T5DatasetHandler(DatasetHandler):
         target_label="summary",
         data_size=100,
         data_dir: str = "data_json",
+        save_locally=None,
     ):
         super().__init__(
             dataset_name,
@@ -217,6 +238,7 @@ class T5DatasetHandler(DatasetHandler):
             target_label,
             data_size,
             data_dir,
+            save_locally,
         )
 
 
