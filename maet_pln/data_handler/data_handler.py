@@ -2,8 +2,16 @@ import json
 from datasets import load_dataset
 import logging
 from abc import ABC, abstractmethod
-from data_handler.prompt_handler import GPT2PromptHandler, T5PromptHandler
-from tokenization import T5TokenizationHandler, GPT2TokenizationHandler
+from data_handler.prompt_handler import (
+    GPT2PromptHandler,
+    T5PromptHandler,
+    BARTPromptHandler,
+)
+from tokenization import (
+    T5TokenizationHandler,
+    GPT2TokenizationHandler,
+    BARTTokenizationHandler,
+)
 from pathlib import Path
 from dotenv import load_dotenv
 from huggingface_hub import login
@@ -267,6 +275,40 @@ class T5DatasetHandler(DatasetHandler):
             default_tokenizer=T5TokenizationHandler,
             tokenizer=tokenizer,
             prompt_handler=T5PromptHandler,
+            rlaif=rlaif,
+            input_label=input_label,
+            target_label=target_label,
+            data_size=data_size,
+            data_dir=data_dir,
+            save_locally=save_locally,
+            push_to_hub=push_to_hub,
+        )
+
+
+class BARTDatasetHandler(DatasetHandler):
+
+    EXPECTED_COLUMNS = ["input", "output", "input_ids", "attention_mask", "labels"]
+    MAX_LENGTHS = {"sft": 0, "rlaif": 50, "val": 50}
+    ID = "BART"
+
+    # Encoder-decoder architecture
+    def __init__(
+        self,
+        dataset_name,
+        tokenizer=None,
+        rlaif=False,
+        input_label="document",
+        target_label="summary",
+        data_size=100,
+        data_dir: str = "data_json",
+        save_locally=None,
+        push_to_hub=True,
+    ):
+        super().__init__(
+            dataset_name=dataset_name,
+            default_tokenizer=BARTTokenizationHandler,
+            tokenizer=tokenizer,
+            prompt_handler=BARTPromptHandler,
             rlaif=rlaif,
             input_label=input_label,
             target_label=target_label,

@@ -2,8 +2,16 @@ import pytest
 from pathlib import Path
 
 
-from data_handler.data_handler import T5DatasetHandler, GPT2DatasetHandler
-from tokenization import T5TokenizationHandler, GPT2TokenizationHandler
+from data_handler.data_handler import (
+    T5DatasetHandler,
+    GPT2DatasetHandler,
+    BARTDatasetHandler,
+)
+from tokenization import (
+    T5TokenizationHandler,
+    GPT2TokenizationHandler,
+    BARTTokenizationHandler,
+)
 import pytest
 
 
@@ -100,6 +108,40 @@ def test_t5_dataset_handler_no_tokenizer():
         "attention_mask",
         "decoder_input_ids",
         "decoder_attention_mask",
+        "labels",
+    ]
+
+
+def test_BART_dataset_handler():
+    tk = BARTTokenizationHandler()
+    tokenizer = tk.create_tokenizer()
+    data_handler = BARTDatasetHandler(
+        DATASET_NAME, tokenizer, data_size=100, push_to_hub=False
+    )
+    data_handler.data_to_json()
+    data = data_handler.process_data()
+    assert len(data) == 2
+    assert len(data[0]) == 82
+    assert list(data[0].features.keys()) == [
+        "input",
+        "output",
+        "input_ids",
+        "attention_mask",
+        "labels",
+    ]
+
+
+def test_BART_dataset_handler_no_tokenizer():
+    data_handler = BARTDatasetHandler(DATASET_NAME, data_size=100, push_to_hub=False)
+    data_handler.data_to_json()
+    data = data_handler.process_data()
+    assert len(data) == 2
+    assert len(data[0]) == 82
+    assert list(data[0].features.keys()) == [
+        "input",
+        "output",
+        "input_ids",
+        "attention_mask",
         "labels",
     ]
 

@@ -91,3 +91,40 @@ class T5PromptHandler(PromptHandler):
             "labels": target_tokens["input_ids"],
         }
         return tokenized_full_prompt
+
+
+class BARTPromptHandler(T5PromptHandler):
+    def __init__(self, tokenizer):
+        super().__init__(tokenizer)
+
+    @property
+    def template(self):
+        return (
+            """<s>You are an expert in text summarization. You are given the full text."""
+            """Your job is to summarise the text as concisely and accurately as possible in a single sentence.\n\n"""
+            """### TEXT:\n{input}\n\n"""
+            """### SUMMARY:</s>"""
+        )
+
+    def tokenize_prompt(self, row, output=True):
+        """
+        Generates a full prompt using the input and output from the given data point,
+        and then tokenizes the full prompt using the provided tokenizer.
+
+        Args:
+            data_point (dict): A dictionary containing the input and output data.
+            tokenizer: The tokenizer object used for tokenization.
+
+        Returns:
+            tokenized_full_prompt: The tokenized version of the full prompt.
+        """
+        row = self.generate_prompt(row)  # add the prompt template
+        input_tokens = self.tokenizer(row["input"])
+        target_tokens = self.tokenizer(row["output"])
+
+        tokenized_full_prompt = {
+            "input_ids": input_tokens["input_ids"],
+            "attention_mask": input_tokens["attention_mask"],
+            "labels": target_tokens["input_ids"],
+        }
+        return tokenized_full_prompt
