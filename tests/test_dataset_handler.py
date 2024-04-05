@@ -34,6 +34,21 @@ def test_gpt2_dataset_handler():
     ]
 
 
+def test_gpt2_dataset_handler_no_tokenizer():
+    data_handler = GPT2DatasetHandler(DATASET_NAME, data_size=100, push_to_hub=False)
+    data_handler.data_to_json()
+    data = data_handler.process_data()
+    assert len(data) == 2
+    assert len(data[0]) == 79
+    assert list(data[0].features.keys()) == [
+        "input",
+        "output",
+        "input_ids",
+        "attention_mask",
+        "labels",
+    ]
+
+
 def test_gpt2_dataset_handler_rlaif():
     tk = GPT2TokenizationHandler()
     tokenizer = tk.create_tokenizer()
@@ -59,6 +74,22 @@ def test_t5_dataset_handler():
     data_handler = T5DatasetHandler(
         DATASET_NAME, tokenizer, data_size=100, push_to_hub=False
     )
+    data_handler.data_to_json()
+    data = data_handler.process_data()
+    assert len(data[0]) == 53
+    assert list(data[0].features.keys()) == [
+        "input",
+        "output",
+        "input_ids",
+        "attention_mask",
+        "decoder_input_ids",
+        "decoder_attention_mask",
+        "labels",
+    ]
+
+
+def test_t5_dataset_handler_no_tokenizer():
+    data_handler = T5DatasetHandler(DATASET_NAME, data_size=100, push_to_hub=False)
     data_handler.data_to_json()
     data = data_handler.process_data()
     assert len(data[0]) == 53

@@ -175,13 +175,16 @@ class DatasetHandler(ABC):
 
     def process_data(self) -> list:
         try:
+            data = load_dataset(
+                "json", data_files=str(self.DATA_DIR / f"raw/{self.data_dir}")
+            )
+            logger.debug("Loading data fro JSON")
+        except FileNotFoundError:
+            logger.warning("No data JSON found, loading directly from HF.")
             dataset = load_dataset(self.dataset_name, split=f"train[:{self.data_size}]")
             data = dataset.rename_columns(
                 {self.input_label: "input", self.output_label: "output"}
             )
-            # data = load_dataset("json", data_files=str(self.DATA_DIR / "raw/data_json"))
-        except FileNotFoundError:
-            raise FileNotFoundError("Have you run the thing first?")
 
         assert set(["input", "output"]) <= set(list(data["train"].features.keys()))
         datasets = self.train_val_split(data)
