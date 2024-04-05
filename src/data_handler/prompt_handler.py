@@ -113,12 +113,12 @@ class BARTPromptHandler(EncoderDecoderPromptHandler):
 
     @property
     def TEMPLATE(self):
-        return (
-            """<s>You are an expert in text summarization. You are given the full text."""
-            """Your job is to summarise the text as concisely and accurately as possible in a single sentence.\n\n"""
-            """### TEXT:\n{input}\n\n"""
-            """### SUMMARY:</s>"""
-        )
+        return """Summarize the following document. {input}\nSummary:"""
+
+    def generate_prompt(self, row):
+        row["input"] = self.TEMPLATE.format(input=row["input"])
+        row["output"] = "{output}".format(output=row["output"])
+        return row
 
     @staticmethod
     def map_tokens(input_tokens, target_tokens):
