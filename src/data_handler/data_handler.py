@@ -186,15 +186,14 @@ class DatasetHandler(ABC):
             data = load_dataset(
                 "json", data_files=str(self.DATA_DIR / f"raw/{self.data_dir}")
             )
-            logger.debug("Loading data fro JSON")
+            logger.debug("Loading data from JSON")
+            assert set(["input", "output"]) <= set(list(data["train"].features.keys()))
         except FileNotFoundError:
             logger.warning("No data JSON found, loading directly from HF.")
             dataset = load_dataset(self.dataset_name, split=f"train[:{self.data_size}]")
             data = dataset.rename_columns(
                 {self.input_label: "input", self.target_label: "output"}
             )
-
-        assert set(["input", "output"]) <= set(list(data["train"].features.keys()))
         datasets = self.train_val_split(data)
 
         # Add prompts and format datasets
