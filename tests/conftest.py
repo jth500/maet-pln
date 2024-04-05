@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 CWD = Path(os.path.dirname(os.path.realpath(__file__)))
-SRC = CWD.parent / "maet_pln"
+SRC = CWD.parent / "src"
 sys.path.append(str(SRC))
 
 # if using mac need this
