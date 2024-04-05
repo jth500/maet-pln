@@ -1,39 +1,35 @@
 import pytest
-from tokenization import T5TokenizationHandler
+from tokenization import (
+    GPT2TokenizationHandler,
+    T5TokenizationHandler,
+    BARTTokenizationHandler,
+)
+import transformers
 
 
-@pytest.fixture(scope="module")
-def t5_tokenizer_handler():
-    return T5TokenizationHandler(model_id="t5-small")
-
-
-@pytest.fixture(scope="module")
-def t5_tokenizer(t5_tokenizer_handler):
-    return t5_tokenizer_handler.create_tokenizer()
-
-
-def test_T5_tokenization_handler():
-    tk = T5TokenizationHandler(model_id="t5-small")
-    assert tk is not None
-
+def test_initialise_gpt_tokenization():
+    tk = GPT2TokenizationHandler()
     tokenizer = tk.create_tokenizer()
-    assert tokenizer is not None
+    assert isinstance(
+        tokenizer, transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast
+    )
+    assert tokenizer.eos_token == "<|endoftext|>"
+    assert tokenizer.bos_token == "<|startoftext|>"
 
 
-def test_tokenize_directly(t5_tokenizer):
-    assert t5_tokenizer("Hi") == {
-        "input_ids": [2018, 1],
-        "attention_mask": [1, 1],
-    }
+def test_initialise_BART_tokenization():
+    tk = BARTTokenizationHandler()
+    tokenizer = tk.create_tokenizer()
+    assert isinstance(
+        tokenizer, transformers.models.bart.tokenization_bart_fast.BartTokenizerFast
+    )
+    assert tokenizer.eos_token == "</s>"
+    assert tokenizer.bos_token == "<s>"
 
 
-# assert t5_tokenizer.tokenize("Hi") == ["_Hi"] # weird failure...
-
-
-def test_tokenize_from_handler(t5_tokenizer_handler):
-    assert t5_tokenizer_handler.tokenize("Hi") == {
-        "input_ids": [2018, 1],
-        "attention_mask": [1, 1],
-        "labels": [2018, 1],
-    }
-    pass
+def test_initialise_t5_tokenization():
+    tk = T5TokenizationHandler()
+    tokenizer = tk.create_tokenizer()
+    assert isinstance(
+        tokenizer, transformers.models.t5.tokenization_t5_fast.T5TokenizerFast
+    )

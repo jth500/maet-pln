@@ -7,8 +7,7 @@ import os
 # from dotenv import load_dotenv
 
 # load_dotenv()
-# cohere_api_key = os.getenv("COHERE_API_KEY")
-cohere_api_key = "ZXPdIn0oozFbK6YtZ3FI0aBH9NIH2gw0MStEXGWz"
+cohere_api_key = os.getenv("COHERE_PROD_API_KEY")
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from trl import (
@@ -66,6 +65,7 @@ class RLAIF:
             base_model = AutoModelForSeq2SeqLMWithValueHead.from_pretrained(
                 self.base_dir, peft_config=lora_config
             )
+        self.base_model = base_model
         return base_model
 
     @property
