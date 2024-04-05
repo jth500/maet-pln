@@ -356,7 +356,7 @@ class BARTDatasetHandler(DatasetHandler):
     
      def generate_prompt(self, data_point):
          data_point['input'] = self.template.format(input=data_point['input'])
-         data_point['output'] = "<s>{output}</s>".format(output=data_point['output'])
+         data_point['output'] = "{output}".format(output=data_point['output'])
          return data_point
     
      def generate_and_tokenize_prompt(self, data_point):
