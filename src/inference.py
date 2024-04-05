@@ -3,13 +3,16 @@ from tqdm import tqdm
 import torch
 from abc import ABC
 import numpy as np
+import os
+import re
+import cohere
 
 from dotenv import load_dotenv
 
 load_dotenv()
-cohere_api_key = os.getenv("COHERE_PROD_API_KEY")
 
-class Inference():
+
+class Inference:
 
     def __init__(self, model, tokenizer, val_data):
         self.model = model
@@ -28,15 +31,17 @@ class Inference():
 
         for i in tqdm(range(sample_size)):
             input_ids = self.val_data["input_ids"][i].unsqueeze(0).to(self.device)
-            attention_mask = self.val_data["attention_mask"][i].unsqueeze(0).to(self.device)
+            attention_mask = (
+                self.val_data["attention_mask"][i].unsqueeze(0).to(self.device)
+            )
             generation_config = GenerationConfig(
                 do_sample=True,
-                temperature=0.3, # too high and will possibly stray too far from the training data
-                top_p=1.0, # chooses from the smallest possible set of words whose cumulative probability exceeds top_p
+                temperature=0.3,  # too high and will possibly stray too far from the training data
+                top_p=1.0,  # chooses from the smallest possible set of words whose cumulative probability exceeds top_p
                 num_beams=3,
                 max_new_tokens=150,
                 pad_token_id=self.model.config.pad_token_id,
-                )
+            )
             with torch.no_grad():
                 generation_output = self.model.generate(
                     input_ids=input_ids,
@@ -58,14 +63,11 @@ class Inference():
             true_summaries.append(self.val_data[i]["output"])
 
         return posts, model_summaries, true_summaries
-    
+
 
 def _ai_rank_summaries(full, true, pred):
 
-    import re
-    import cohere
-
-    co = cohere.Client(cohere_key)
+    co = cohere.Client(os.environ["COHERE_PROD_API_KEY"])
 
     format = f"""### FULL TEXT:\n {full}
     ### SUMMARY 1:\n{true}\n\n
@@ -102,6 +104,7 @@ def _ai_rank_summaries(full, true, pred):
     )
 
     return response
+
 
 def win_rate(full_texts, summaries_1, summaries_2, n_samples=100):
     results = []

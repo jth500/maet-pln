@@ -94,31 +94,3 @@ class SFT:
             None
         """
         self.base_model.push_to_hub(self._save_dir)
-
-
-if __name__ == "__main__":
-
-    from huggingface_hub import login
-
-    login("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")
-
-    # CWD = Path(os.path.dirname(os.path.realpath(__file__)))
-    # SRC = CWD.parent / "src"
-    # sys.path.append(str(CWD))
-
-    from tokenization import TokenizationHandler
-    from model_builder import T5ModelBuilder
-    from maet_pln.data_handler.data_handler import T5DatasetHandler
-
-    model_id = "t5-base"
-    tokenizer = TokenizationHandler().create_tokenizer()
-    model = T5ModelBuilder(model_id, tokenizer).base_model
-
-    dataset_name = "EdinburghNLP/xsum"
-    data_handler = T5DatasetHandler(dataset_name, tokenizer)
-    sft_train_data, rlaif_train_data, val_data = data_handler.process_data(
-        input_label="document", target_label="summary"
-    )
-
-    sft = SFT(model, tokenizer, "sft_model", sft_train_data)
-    sft.train_model()
