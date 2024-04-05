@@ -350,11 +350,8 @@ class BARTDatasetHandler(DatasetHandler):
          super().__init__(dataset_name, tokenizer, data_dir)
      @property
      def template(self):
-         return (
-             """<s>You are an expert in text summarization. You are given the full text."""
-             """Your job is to summarise the text as concisely and accurately as possible in a single sentence.\n\n"""
-             """### TEXT:\n{input}\n\n"""
-             """### SUMMARY:</s>"""
+         return ("""Summarize the following document. {input} 
+         Summary:"""
          )
     
      def generate_prompt(self, data_point):
