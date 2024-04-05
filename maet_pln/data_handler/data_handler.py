@@ -191,7 +191,7 @@ class DatasetHandler(ABC):
             logger.warning("No data JSON found, loading directly from HF.")
             dataset = load_dataset(self.dataset_name, split=f"train[:{self.data_size}]")
             data = dataset.rename_columns(
-                {self.input_label: "input", self.output_label: "output"}
+                {self.input_label: "input", self.target_label: "output"}
             )
 
         assert set(["input", "output"]) <= set(list(data["train"].features.keys()))
