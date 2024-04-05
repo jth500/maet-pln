@@ -54,13 +54,14 @@ class GPT2PromptHandler(PromptHandler):
         return tokenized_full_prompt
 
 
-class T5PromptHandler(PromptHandler):
+class EncoderDecoderPromptHandler(PromptHandler):
     def __init__(self, tokenizer):
         super().__init__(tokenizer)
 
-    @property
-    def TEMPLATE(self):
-        return """summarize: {input}"""
+    @staticmethod
+    @abstractmethod
+    def map_tokens(input_tokens, target_tokens):
+        pass
 
     def generate_prompt(self, row):
         row["input"] = self.TEMPLATE.format(input=row["input"])
@@ -83,22 +84,35 @@ class T5PromptHandler(PromptHandler):
         input_tokens = self.tokenizer(row["input"])
         target_tokens = self.tokenizer(row["output"])
 
-        tokenized_full_prompt = {
+        tokenized_full_prompt = self.map_tokens(input_tokens, target_tokens)
+        return tokenized_full_prompt
+
+
+class T5PromptHandler(EncoderDecoderPromptHandler):
+    def __init__(self, tokenizer):
+        super().__init__(tokenizer)
+
+    @property
+    def TEMPLATE(self):
+        return """summarize: {input}"""
+
+    @staticmethod
+    def map_tokens(input_tokens, target_tokens):
+        return {
             "input_ids": input_tokens["input_ids"],
             "attention_mask": input_tokens["attention_mask"],
             "decoder_input_ids": target_tokens["input_ids"],
             "decoder_attention_mask": target_tokens["attention_mask"],
             "labels": target_tokens["input_ids"],
         }
-        return tokenized_full_prompt
 
 
-class BARTPromptHandler(T5PromptHandler):
+class BARTPromptHandler(EncoderDecoderPromptHandler):
     def __init__(self, tokenizer):
         super().__init__(tokenizer)
 
     @property
-    def template(self):
+    def TEMPLATE(self):
         return (
             """<s>You are an expert in text summarization. You are given the full text."""
             """Your job is to summarise the text as concisely and accurately as possible in a single sentence.\n\n"""
@@ -106,25 +120,10 @@ class BARTPromptHandler(T5PromptHandler):
             """### SUMMARY:</s>"""
         )
 
-    def tokenize_prompt(self, row, output=True):
-        """
-        Generates a full prompt using the input and output from the given data point,
-        and then tokenizes the full prompt using the provided tokenizer.
-
-        Args:
-            data_point (dict): A dictionary containing the input and output data.
-            tokenizer: The tokenizer object used for tokenization.
-
-        Returns:
-            tokenized_full_prompt: The tokenized version of the full prompt.
-        """
-        row = self.generate_prompt(row)  # add the prompt template
-        input_tokens = self.tokenizer(row["input"])
-        target_tokens = self.tokenizer(row["output"])
-
-        tokenized_full_prompt = {
+    @staticmethod
+    def map_tokens(input_tokens, target_tokens):
+        return {
             "input_ids": input_tokens["input_ids"],
             "attention_mask": input_tokens["attention_mask"],
             "labels": target_tokens["input_ids"],
         }
-        return tokenized_full_prompt

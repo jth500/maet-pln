@@ -121,7 +121,7 @@ def test_BART_dataset_handler():
     data_handler.data_to_json()
     data = data_handler.process_data()
     assert len(data) == 2
-    assert len(data[0]) == 82
+    assert len(data[0]) == 80
     assert list(data[0].features.keys()) == [
         "input",
         "output",
@@ -136,7 +136,7 @@ def test_BART_dataset_handler_no_tokenizer():
     data_handler.data_to_json()
     data = data_handler.process_data()
     assert len(data) == 2
-    assert len(data[0]) == 82
+    assert len(data[0]) == 80
     assert list(data[0].features.keys()) == [
         "input",
         "output",
