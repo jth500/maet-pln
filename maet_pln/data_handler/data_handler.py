@@ -3,6 +3,7 @@ from datasets import load_dataset
 import logging
 from abc import ABC, abstractmethod
 from data_handler.prompt_handler import GPT2PromptHandler, T5PromptHandler
+from tokenization import T5TokenizationHandler, GPT2TokenizationHandler
 from pathlib import Path
 from dotenv import load_dotenv
 from huggingface_hub import login
@@ -43,6 +44,7 @@ class DatasetHandler(ABC):
     def __init__(
         self,
         dataset_name,
+        default_tokenizer,
         tokenizer,
         prompt_handler,
         rlaif=False,
@@ -56,6 +58,7 @@ class DatasetHandler(ABC):
         self.dataset_name = dataset_name
         self.input_label = input_label
         self.target_label = target_label
+        self.default_tokenizer = default_tokenizer
         self.tokenizer = tokenizer
         self.prompt_handler = prompt_handler
         self.rlaif = rlaif
@@ -67,6 +70,18 @@ class DatasetHandler(ABC):
             save_locally is None and data_size < 10**6
         )
         self.datasets = None
+
+    @property
+    def tokenizer(self):
+        return self._tokenizer
+
+    @tokenizer.setter
+    def tokenizer(self, tk):
+        if tk is None:
+            tk_handler = self.default_tokenizer()
+            self._tokenizer = tk_handler.create_tokenizer()
+        else:
+            self._tokenizer = tk
 
     @property
     def push_to_hub(self):
@@ -160,7 +175,11 @@ class DatasetHandler(ABC):
 
     def process_data(self) -> list:
         try:
-            data = load_dataset("json", data_files=str(self.DATA_DIR / "raw/data_json"))
+            dataset = load_dataset(self.dataset_name, split=f"train[:{self.data_size}]")
+            data = dataset.rename_columns(
+                {self.input_label: "input", self.output_label: "output"}
+            )
+            # data = load_dataset("json", data_files=str(self.DATA_DIR / "raw/data_json"))
         except FileNotFoundError:
             raise FileNotFoundError("Have you run the thing first?")
 
@@ -189,8 +208,7 @@ class GPT2DatasetHandler(DatasetHandler):
     def __init__(
         self,
         dataset_name,
-        tokenizer,
-        prompt_handler=GPT2PromptHandler,
+        tokenizer=None,
         rlaif=False,
         input_label="document",
         target_label="summary",
@@ -200,16 +218,17 @@ class GPT2DatasetHandler(DatasetHandler):
         push_to_hub=True,
     ):
         super().__init__(
-            dataset_name,
-            tokenizer,
-            prompt_handler,
-            rlaif,
-            input_label,
-            target_label,
-            data_size,
-            data_dir,
-            save_locally,
-            push_to_hub,
+            dataset_name=dataset_name,
+            default_tokenizer=GPT2TokenizationHandler,
+            tokenizer=tokenizer,
+            prompt_handler=GPT2PromptHandler,
+            rlaif=rlaif,
+            input_label=input_label,
+            target_label=target_label,
+            data_size=data_size,
+            data_dir=data_dir,
+            save_locally=save_locally,
+            push_to_hub=push_to_hub,
         )
 
 
@@ -231,8 +250,7 @@ class T5DatasetHandler(DatasetHandler):
     def __init__(
         self,
         dataset_name,
-        tokenizer,
-        prompt_handler=T5PromptHandler,
+        tokenizer=None,
         rlaif=False,
         input_label="document",
         target_label="summary",
@@ -242,16 +260,17 @@ class T5DatasetHandler(DatasetHandler):
         push_to_hub=True,
     ):
         super().__init__(
-            dataset_name,
-            tokenizer,
-            prompt_handler,
-            rlaif,
-            input_label,
-            target_label,
-            data_size,
-            data_dir,
-            save_locally,
-            push_to_hub,
+            dataset_name=dataset_name,
+            default_tokenizer=T5TokenizationHandler,
+            tokenizer=tokenizer,
+            prompt_handler=T5PromptHandler,
+            rlaif=rlaif,
+            input_label=input_label,
+            target_label=target_label,
+            data_size=data_size,
+            data_dir=data_dir,
+            save_locally=save_locally,
+            push_to_hub=push_to_hub,
         )
 
 
