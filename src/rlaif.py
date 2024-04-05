@@ -66,6 +66,7 @@ class RLAIF:
             base_model = AutoModelForSeq2SeqLMWithValueHead.from_pretrained(
                 self.base_dir, peft_config=lora_config
             )
+        self.base_model = base_model
         return base_model
 
     @property
