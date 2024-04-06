@@ -158,7 +158,6 @@ class RLAIF:
             response = (
                 co.generate(
                     model="command-nightly",
-                    # Can this prompt be tailored to cohere's command-nightly model?
                     prompt=f"""You are an expert in text summarization.
 
 Your role is to rate the provided summarization with scores ranging from 0.01 to 0.99, where: 0.01 is the lowest score, 0.99 is the highest score.
