@@ -1,4 +1,8 @@
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, BartForConditionalGeneration
+from transformers import (
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    BartForConditionalGeneration,
+)
 
 import logging
 import json
@@ -11,27 +15,12 @@ logger = logging.getLogger(__name__)
 
 class ModelBuilder(ABC):
     """
-    A class used to build and manage a machine learning model and its tokenizer.
+    Abstract base class for building models.
 
-    ...
-
-    Attributes
-    ----------
-    model_id : str
-        a formatted string to print out the model id
-    model_type : transformers.PreTrainedModel
-        the type of the model
-    tokenizer : transformers.PreTrainedTokenizer
-        the tokenizer of the model
-    base_model : transformers.PreTrainedModel
-        the base model
-
-    Methods
-    -------
-    init(self, model_id, model_type)
-        Initializes the ModelBuilder with a model id and model type.
-    create_base_model(self)
-        Creates and returns the base model.
+    Args:
+        model_id (str): The ID of the model.
+        model_type (type): The type of the model.
+        tokenizer (object, optional): The tokenizer object. Defaults to None.
     """
 
     def __init__(self, model_id, model_type, tokenizer=None):
@@ -43,17 +32,33 @@ class ModelBuilder(ABC):
 
     @property
     def base_model(self):
+        """
+        Property that returns the base model.
+        If the base model is not created, it creates one using the create_base_model method.
+
+        Returns:
+            The base model.
+        """
         if self._base_model is None:
             self._base_model = self.create_base_model()
         return self._base_model
 
     @base_model.setter
     def base_model(self, bm):
+        """
+        Setter for the base model.
+
+        Args:
+            bm (object): The base model object.
+        """
         self._base_model = bm
 
     def create_base_model(self, **kwargs):
         """
         Creates and returns the base model.
+
+        Args:
+            **kwargs: Additional keyword arguments for creating the base model.
 
         Returns:
             The base model.
@@ -69,7 +74,7 @@ class ModelBuilder(ABC):
         base_model.config.pad_token_id = self.tokenizer.pad_token_id
         base_model.resize_token_embeddings(len(self.tokenizer))
         return base_model
-    
+
     def print_trainable_parameters(self):
         """
         Prints the number of trainable parameters in the model.
@@ -87,12 +92,16 @@ class ModelBuilder(ABC):
 
 class T5ModelBuilder(ModelBuilder):
     def __init__(self, model_id, tokenizer):
-        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM, tokenizer=tokenizer)
+        super().__init__(
+            model_id, model_type=AutoModelForSeq2SeqLM, tokenizer=tokenizer
+        )
 
 
 class BARTModelBuilder(ModelBuilder):
     def __init__(self, model_id, tokenizer):
-        super().__init__(model_id, model_type=AutoModelForSeq2SeqLM, tokenizer=tokenizer)
+        super().__init__(
+            model_id, model_type=AutoModelForSeq2SeqLM, tokenizer=tokenizer
+        )
 
 
 class GPT2ModelBuilder(ModelBuilder):

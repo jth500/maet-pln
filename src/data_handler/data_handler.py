@@ -22,31 +22,37 @@ load_dotenv()
 
 
 class DatasetHandler(ABC):
-    DATA_DIR = Path(__file__).parent.parent.parent / "data"
     """
-    A class used to handle the dataset used for training the model.
+    A class for handling datasets.
 
-    ...
+    Args:
+        dataset_name (str): The name of the dataset.
+        default_tokenizer (Callable): The default tokenizer function.
+        tokenizer (Tokenizer): The tokenizer object.
+        prompt_handler (PromptHandler): The prompt handler object.
+        rlaif (bool, optional): Whether to use the "rlaif" model. Defaults to False.
+        input_label (str, optional): The label for the input data. Defaults to "document".
+        target_label (str, optional): The label for the target data. Defaults to "summary".
+        data_size (int, optional): The size of the data. Defaults to 10000.
+        data_dir (str, optional): The directory for the data. Defaults to "data_json".
+        save_locally (bool, optional): Whether to save the dataset locally. Defaults to None.
+        push_to_hub (bool, optional): Whether to push the dataset to the Hugging Face Hub. Defaults to True.
 
-    Attributes
-    ----------
-    dataset_name : str
-        a formatted string to print out the dataset name
-    data_dir : str
-        the directory where the data is stored
-    tokenizer : transformers.PreTrainedTokenizer
-        the tokenizer of the model
+    Attributes:
+        dataset_name (str): The name of the dataset.
+        input_label (str): The label for the input data.
+        target_label (str): The label for the target data.
+        default_tokenizer (Callable): The default tokenizer function.
+        tokenizer (Tokenizer): The tokenizer object.
+        prompt_handler (PromptHandler): The prompt handler object.
+        rlaif (bool): Whether to use the "rlaif" model.
+        data_size (int): The size of the data.
+        data_dir (str): The directory for the data.
+        _hf_login_attempted (bool): Whether the Hugging Face login has been attempted.
+        push_to_hub (bool): Whether to push the dataset to the Hugging Face Hub.
+        save_locally (bool): Whether to save the dataset locally.
+        datasets (dict): The processed datasets.
 
-    Methods
-    -------
-    __init__(self, dataset_name, tokenizer, data_dir: str = "data_json")
-        Initializes the DatasetHandler with a dataset name, tokenizer, and data directory.
-    data_to_json(self)
-        Converts the dataset to JSON format and writes it to a file.
-    generate_prompt(input, output="")
-        Generates a prompt from a given input and output.
-    process_data(self, dataset_name)
-        Processes the data by loading the dataset, converting it to JSON format, splitting it into training and validation sets, and tokenizing the prompts.
     """
 
     def __init__(
@@ -79,6 +85,8 @@ class DatasetHandler(ABC):
         )
         self.datasets = None
 
+    DATA_DIR = Path(__file__).parent.parent.parent / "data"
+
     @property
     def tokenizer(self):
         return self._tokenizer
@@ -105,15 +113,33 @@ class DatasetHandler(ABC):
     @property
     @abstractmethod
     def EXPECTED_COLUMNS(self):
+        """
+        The expected columns in the dataset.
+
+        Returns:
+            list: A list of column names.
+        """
         pass
 
     @property
     @abstractmethod
     def MAX_LENGTHS(self):
+        """
+        The maximum lengths for different models.
+
+        Returns:
+            dict: A dictionary mapping model names to their maximum lengths.
+        """
         pass
 
     @property
     def max_lengths(self):
+        """
+        The maximum lengths for different models.
+
+        Returns:
+            dict: A dictionary mapping model names to their maximum lengths.
+        """
         return {
             "sft": self.tokenizer.model_max_length,
             "rlaif": self.tokenizer.model_max_length - self.MAX_LENGTHS["rlaif"],
@@ -122,6 +148,12 @@ class DatasetHandler(ABC):
 
     @property
     def prompt_handler(self):
+        """
+        The prompt handler object.
+
+        Returns:
+            PromptHandler: The prompt handler object.
+        """
         # instantiate the thing
         if isinstance(self._prompt_handler, type):
             self._prompt_handler = self._prompt_handler(self.tokenizer)
@@ -133,13 +165,11 @@ class DatasetHandler(ABC):
 
     def data_to_json(self):
         """
-        Converts the dataset to JSON format and saves it to a file named 'data_json'.
+        Converts the dataset to JSON format and saves it to a file.
 
-        This method loads the dataset, iterates over the items in the dataset, and converts each item
-        to a JSON object with 'input' and 'output' keys. The JSON objects are then written to a file
-        named 'data_json' in the current directory.
-
-        Note: The dataset is limited to the first x examples from the 'train' split.
+        This method loads the dataset specified by `dataset_name` and selects a subset of the data based on `data_size`.
+        It then converts each item in the dataset to a JSON object with "input" and "output" fields, and writes the JSON objects
+        to a file named "data_json" in the "raw" directory of the `DATA_DIR`.
 
         Returns:
             None
@@ -158,6 +188,22 @@ class DatasetHandler(ABC):
                     f.write(json.dumps(newitem) + "\n")
 
     def train_val_split(self, data) -> dict:
+        """
+        Splits the data into training and validation sets.
+
+        Args:
+            data (dict): The input data dictionary containing the "train" dataset.
+
+        Returns:
+            dict: A dictionary containing the training and validation sets.
+                If `rlaif` is True, the dictionary will have the following keys:
+                    - "sft": The training set for the "sft" model.
+                    - "rlaif": The training set for the "rlaif" model.
+                    - "val": The validation set.
+                If `rlaif` is False, the dictionary will have the following keys:
+                    - "sft": The training set for the "sft" model.
+                    - "val": The validation set.
+        """
         data = data["train"].train_test_split(test_size=0.1, shuffle=True, seed=42)
         if self.rlaif:
             s = data["train"].train_test_split(test_size=0.2, shuffle=True, seed=42)
@@ -166,6 +212,17 @@ class DatasetHandler(ABC):
             return {"sft": data["train"], "val": data["test"]}
 
     def save_dataset(self, d, k):
+        """
+        Saves the dataset `d` to the specified location.
+
+        Args:
+            d (Dataset): The dataset to be saved.
+            k (str): The identifier for the dataset.
+
+        Raises:
+            Exception: If there is an error while saving the dataset locally or pushing it to the Hugging Face Hub.
+
+        """
         if self.save_locally:
             try:
                 d.save_to_disk(str(self.DATA_DIR / f"processed/{self.ID}_{k}"))
@@ -182,6 +239,13 @@ class DatasetHandler(ABC):
                 pass
 
     def process_data(self) -> list:
+        """
+        Process the data by loading it, splitting it into train and validation sets,
+        adding prompts, formatting the datasets, and saving them.
+
+        Returns:
+            A list of processed datasets.
+        """
         try:
             data = load_dataset(
                 "json", data_files=str(self.DATA_DIR / f"raw/{self.data_dir}")
